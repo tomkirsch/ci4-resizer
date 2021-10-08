@@ -33,7 +33,7 @@ class Resizer extends Controller{
 	}
 	
 	// cleanup cache for given file
-	public function cleanFile(){
+	public function cleanfile(){
 		$file = $this->request->getGet('file');
 		if(empty($imageFile)) throw new \Exception('No file given!');
 		$parts = explode('.', $file);
@@ -41,7 +41,7 @@ class Resizer extends Controller{
 	}
 	
 	// cleanup all cache
-	public function cleanDir($force=FALSE){
+	public function cleandir($force=FALSE){
 		service('resizer')->cleanDir((bool) $force);
 	}
 }
@@ -63,3 +63,12 @@ Add cache dir to .gitignore:
 ```
 writable/resizercache/*
 ````
+
+## Usage
+
+Use public URLs for your images.
+```
+<?= img([
+	'src'=>base_url(service('resizer')->publicFile('kitten-src', 600, '.jpg')),
+]) ?>
+```

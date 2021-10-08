@@ -19,15 +19,17 @@ class Resizer extends Controller{
 	}
 	
 	// cleanup cache for given file
-	public function cleanFile(){
+	public function cleanfile(){
 		$file = $this->request->getGet('file');
 		if(empty($imageFile)) throw new \Exception('No file given!');
 		$parts = explode('.', $file);
 		service('resizer')->cleanFile($parts[0], '.'.$parts[1]);
+		print 'cache cleaned';
 	}
 	
 	// cleanup all cache
-	public function cleanDir($force=FALSE){
+	public function cleandir($force=FALSE){
 		service('resizer')->cleanDir((bool) $force);
+		print 'cache cleaned';
 	}
 }
