@@ -62,13 +62,13 @@ class Resizer{
 		// generate headers
 		$extNoDot = substr($ext, 1);
 		$mime = $this->mimeFromExt($extNoDot);
-		if($mime) header("Content-Type: image/$mime");
+		if($mime) header("Content-Type: $mime");
 		$headerDate = gmdate('D, d M Y H:i:s T', $sourceTime);
 		header("Last-Modified: $headerDate");
-		header("Content-Length: ".filesize($cacheFile));
 		header("Cache-control: public, max-age=2592000"); // 1 mo.
 		// if we have a cache file, read it
 		if($cacheExists){
+			header("Content-Length: ".filesize($cacheFile));
 			readfile($cacheFile);
 		}else{
 			// image resource should still exist, output it to the browser using GD function
@@ -90,7 +90,8 @@ class Resizer{
 		$files = [];
 		foreach ($iterator as $info) {
 			// delete file if $forceCleanAll, or file is older than our ttl
-			if($forceCleanAll || $info->getMTime() + $this->config->ttl > time()){
+			$expired = $this->config->ttl ? $info->getMTime() + $this->config->ttl > time() : FALSE;
+			if($forceCleanAll || $expired){
 				try{
 					unlink($info->getRealPath());
 				}catch(\Exception $e){
@@ -176,6 +177,6 @@ class Resizer{
 			case 'gif':
 				$func = 'imagegif'; break;
 		}
-		$func($this->getResource());
+		$func($this->imageLib->getResource());
 	}
 }

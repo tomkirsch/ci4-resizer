@@ -14,8 +14,9 @@ class Resizer extends Controller{
 		if(empty($ext)) throw new \Exception('No ext given!');
 		if(substr($ext, 0, 1) !== '.') $ext = '.'.$ext;
 		// generate cache file and spit out the actual image
-		// this will exit the script!
 		service('resizer')->read($imageFile, intval($size), $ext);
+		// exit the script
+		exit;
 	}
 	
 	// cleanup cache for given file
