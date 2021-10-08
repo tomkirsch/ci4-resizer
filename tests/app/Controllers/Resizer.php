@@ -1,17 +1,3 @@
-# GD Image Resizer
-
-## Installation
-
-Create the service in Config/Services.php
-```
-	public static function resizer($config = null, bool $getShared=TRUE){
-		$config = $config ?? new \Tomkirsch\Resizer\ResizerConfig();
-		return $getShared ? static::getSharedInstance('resizer', $config) : new \Tomkirsch\Resizer\Resizer($config);
-	}
-```
-
-Create your resizer controller:
-```
 <?php namespace App\Controllers;
 
 use CodeIgniter\Controller;
@@ -45,21 +31,3 @@ class Resizer extends Controller{
 		service('resizer')->cleanDir((bool) $force);
 	}
 }
-```
-
-Modify .htaccess to use the resizer controller. Ensure characters match `$resizerConfig->rewriteSegment` and `$resizerConfig->rewriteSizeSep`
-```
-	# Image resizer
-	# imagerez/some-folder/filename-1024.jpg
-	RewriteRule ^imagerez\/(.+)-([0-9]+)\.(.+) resizer/read?file=$1&size=$2&ext=$3 [NC,QSA]
-```
-
-If you get a page not found, change your config to use PATH_INFO in app\Config\App.php:
-```
-	public $uriProtocol = 'PATH_INFO';
-```
-
-Add cache dir to .gitignore:
-```
-writable/resizercache/*
-````

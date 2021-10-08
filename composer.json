@@ -1,0 +1,18 @@
+{
+    "name": "tomkirsch/resizer",
+    "type": "library",
+    "description": "Image resizer library for CI4",
+	"license": "MIT",
+    "require": {
+        "php": ">=7.2",
+	"codeigniter4/framework": "^4"
+    },
+    "autoload": {
+        "psr-4": {
+            "Tomkirsch\\resizer\\": "src/"
+        }
+    },
+    "archive": {
+        "exclude": ["tests"]
+     }
+}
