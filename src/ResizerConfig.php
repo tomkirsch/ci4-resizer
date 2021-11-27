@@ -4,6 +4,7 @@ use CodeIgniter\Config\BaseConfig;
 
 class ResizerConfig extends BaseConfig{
 	public $rewriteSegment = 'imagerez'; // this "folder" lets htaccess know to rewrite the request to Resizer controller. must match your .htaccess file regex
+	// RewriteRule ^imagerez\/(.+)-([0-9]+)\.(.+) resizer/read?file=$1&size=$2&ext=$3 [NC,QSA]
 	public $rewriteSizeSep = '-'; // separator from base file name and requested size. must match your .htaccess file regex
 	public $realImagePath = ROOTPATH . '/public'; // real path to source images
 	public $useCache = TRUE; // turn off file cache for testing
