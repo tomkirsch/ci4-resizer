@@ -32,6 +32,22 @@ class Resizer
 		$sourceTime = filemtime($sourceFile);
 
 		if (!file_exists($cacheFile)) {
+			// find an alternate cache
+			$cacheMap = [];
+			foreach (glob($this->config->resizerCachePath . '/' . $imageFile . "*") as $altCache) {
+				// remove path, file name, and ext
+				$width = preg_replace('/^.*-([0-9]+)\..*$/', '$1', $altCache);
+				if (!is_numeric($width)) continue;
+				$width = intval($width);
+				if ($width < $size) continue;
+				$cacheMap[intval($width)] = $altCache;
+			}
+			// sort by width
+			ksort($cacheMap);
+			if (count($cacheMap)) $cacheFile = array_shift($cacheMap);
+		}
+
+		if (!file_exists($cacheFile)) {
 			$createCache = $this->config->useCache;
 			$cacheExists = FALSE;
 		} else {
