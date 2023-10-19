@@ -28,11 +28,11 @@ class Resizer
 		if (!$this->imageLib) $this->imageLib = \Config\Services::image('gd');
 		$sourceFile = $this->sourceFile($imageFile, $ext);
 		$cacheFile = $this->cacheFile($imageFile, $size, $ext);
-		$createCache = FALSE;
 		$sourceTime = filemtime($sourceFile);
 
+		// find an alternate cache if the correct size is not available
+		$altCache = NULL;
 		if (!file_exists($cacheFile)) {
-			// find an alternate cache
 			$cacheMap = [];
 			foreach (glob($this->config->resizerCachePath . '/' . $imageFile . "*") as $altCache) {
 				// remove path, file name, and ext
@@ -44,31 +44,40 @@ class Resizer
 			}
 			// sort by width
 			ksort($cacheMap);
-			if (count($cacheMap)) $cacheFile = array_shift($cacheMap);
+			if (count($cacheMap)) $altCache = array_shift($cacheMap);
+			// ensure alt cache filemtime is older than source
+			if ($altCache && filemtime($altCache) > $sourceTime) {
+				try {
+					unlink($altCache);
+				} catch (\Exception $e) {
+					log_message('error', 'Resizer Lib cannot unlink file ' . $altCache);
+				}
+				$altCache = NULL;
+			}
 		}
 
 		if (!file_exists($cacheFile)) {
 			$createCache = $this->config->useCache;
 			$cacheExists = FALSE;
-		} else {
-			// compare filemtime
-			if ($sourceTime > filemtime($cacheFile)) {
-				// source was updated, clear cache
-				try {
-					unlink($cacheFile);
-				} catch (\Exception $e) {
-					log_message('error', 'Resizer Lib cannot unlink file ' . $cacheFile);
-				}
-				$createCache = $this->config->useCache;
-				$cacheExists = FALSE;
-			} else {
-				$cacheExists = TRUE;
+		} else if ($sourceTime > filemtime($cacheFile)) {
+			// source was updated, clear cache
+			try {
+				unlink($cacheFile);
+			} catch (\Exception $e) {
+				log_message('error', 'Resizer Lib cannot unlink file ' . $cacheFile);
 			}
+			$createCache = $this->config->useCache;
+			$cacheExists = FALSE;
+		} else {
+			// cache is valid
+			$createCache = FALSE;
+			$cacheExists = TRUE;
 		}
 
+		// resize the file
 		if (!$cacheExists) {
 			$this->imageLib
-				->withFile($sourceFile)
+				->withFile($altCache ?? $sourceFile)
 				->resize($size, $size, TRUE, 'width');
 			if ($createCache) {
 				$this->imageLib->save($cacheFile);
