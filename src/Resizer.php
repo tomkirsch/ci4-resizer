@@ -34,16 +34,17 @@ class Resizer
 		$altCache = NULL;
 		if (!file_exists($cacheFile)) {
 			$cacheMap = [];
-			foreach (glob($this->config->resizerCachePath . '/' . $imageFile . "*") as $altCache) {
+			foreach (glob($this->config->resizerCachePath . '/' . $imageFile . "*") as $altFile) {
 				// remove path, file name, and ext
-				$width = preg_replace('/^.*-([0-9]+)\..*$/', '$1', $altCache);
+				$width = preg_replace('/^.*-([0-9]+)\..*$/', '$1', $altFile);
 				if (!is_numeric($width)) continue;
 				$width = intval($width);
-				if ($width < $size) continue;
-				$cacheMap[intval($width)] = $altCache;
+				if ($width < $size) continue; // too small!
+				$cacheMap[intval($width)] = $altFile;
 			}
 			// sort by width
 			ksort($cacheMap);
+			// anything in here? use the smallest possible
 			if (count($cacheMap)) $altCache = array_shift($cacheMap);
 			// ensure alt cache filemtime is older than source
 			if ($altCache && filemtime($altCache) > $sourceTime) {
