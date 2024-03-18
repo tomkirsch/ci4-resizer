@@ -61,8 +61,9 @@ class Resizer
 			}
 		}
 
-		if (!file_exists($cacheFile)) {
-			$createCache = $this->config->useCache;
+		if (!$this->config->useCache || !file_exists($cacheFile)) {
+			// no cache setting, or no cache for this size
+			$createCache = TRUE;
 			$cacheExists = FALSE;
 		} else if ($sourceTime > filemtime($cacheFile)) {
 			// source was updated, clear cache
@@ -71,7 +72,7 @@ class Resizer
 			} catch (\Exception $e) {
 				log_message('error', 'Resizer Lib cannot unlink file ' . $cacheFile);
 			}
-			$createCache = $this->config->useCache;
+			$createCache = TRUE;
 			$cacheExists = FALSE;
 		} else {
 			// cache is valid
@@ -79,11 +80,31 @@ class Resizer
 			$cacheExists = TRUE;
 		}
 
-		// resize the file
 		if (!$cacheExists) {
-			$this->imageLib
-				->withFile($altCache ?? $sourceFile)
-				->resize($size, $size, TRUE, 'width');
+			// read the image size (performance hit!) and determine if its out of bounds
+			$this->imageLib->withFile($altCache ?? $sourceFile);
+			// upscale check
+			if ($this->config->allowUpscale) {
+				$sourceWidth = $this->imageLib->getWidth();
+				$sourceHeight = $this->imageLib->getHeight();
+				if ($sourceWidth < $size && $sourceHeight < $size) {
+					$size = max($sourceWidth, $sourceHeight);
+					$cacheFile = $this->cacheFile($imageFile, $size, $ext);
+					$cacheExists = file_exists($cacheFile);
+				}
+			}
+			// maxSize check
+			if ($this->config->maxSize && $size > $this->config->maxSize) {
+				$size = $this->config->maxSize;
+				$cacheFile = $this->cacheFile($imageFile, $size, $ext);
+				$cacheExists = file_exists($cacheFile);
+			}
+		}
+
+		// check cache file once again
+		if (!$cacheExists) {
+			// resize the image (performance hit!)
+			$this->imageLib->resize($size, $size, TRUE, 'width');
 			if ($createCache) {
 				$this->imageLib->save($cacheFile);
 				$cacheExists = TRUE;
