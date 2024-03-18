@@ -2,22 +2,26 @@
 
 namespace Tomkirsch\Resizer;
 
-/*
-	Automagically resize a source image with caching
-	If .htaccess doesn't seem to want to recognize the path, try setting CI's App config $uriProtocol to PATH_INFO
-*/
+use CodeIgniter\Images\Handlers\BaseHandler;
+
+/**
+ * Automagically resize a source image with caching using CI's GD image library.
+ * If .htaccess doesn't seem to want to recognize the path, try setting CI's App config $uriProtocol to PATH_INFO
+ **/
 
 class Resizer
 {
-	public $config;
-	public $imageLib;
+	public ?ResizerConfig $config = NULL;
+	public ?BaseHandler $imageLib = NULL;
 
-	public function __construct($config)
+	public function __construct(ResizerConfig $config)
 	{
 		$this->config = $config;
 	}
 
-	// reads a certain size image and outputs contents. If the source is newer than the cache, it is automatically cleaned
+	/**
+	 * Reads image file and outputs contents via readfile() or GD function (ie. imagejpeg()). If the source is newer than the cache, it is automatically cleaned. Note that all output buffering is cleared!
+	 */
 	public function read(string $imageFile, int $size, string $ext = '.jpg')
 	{
 		// random clean
@@ -106,7 +110,9 @@ class Resizer
 		}
 	}
 
-	// cleans the entire cache dir. Uses filemtime or forced deletion
+	/**
+	 * Cleans the entire cache dir. Uses filemtime or forced deletion. Returns an array of files deleted.
+	 */
 	public function cleanDir(bool $forceCleanAll = FALSE): array
 	{
 		// interator
@@ -135,7 +141,9 @@ class Resizer
 		return $files;
 	}
 
-	// utility - removes all cached files for a given image
+	/**
+	 * Cleans all cache files for a given image. Returns an array of files deleted.
+	 */
 	public function cleanFile(string $imageFile): array
 	{
 		$dir = new \RecursiveDirectoryIterator($this->config->resizerCachePath);
@@ -160,19 +168,25 @@ class Resizer
 		return $files;
 	}
 
-	// utility - generate a public-pointing file path
+	/**
+	 * Returns a public URL for a given image file and size. This is useful for generating image URLs in views.
+	 */
 	public function publicFile(string $imageFile, int $size, string $ext = '.jpg'): string
 	{
 		return $this->config->rewriteSegment . '/' . $imageFile . $this->config->rewriteSizeSep . $size . $ext;
 	}
 
-	// utility - gets the path + name of the source image file
+	/**
+	 * Returns the path to the source file. This is useful for working with server-side file operations.
+	 */
 	public function sourceFile(string $imageFile, string $ext = '.jpg'): string
 	{
 		return $this->config->realImagePath . '/' . $imageFile . $ext;
 	}
 
-	// utility - gets the path + name of the cache file, and ensures the path exists
+	/**
+	 * Gets the path + name of the cache file, and ensures the path exists.
+	 */
 	public function cacheFile(string $imageFile, int $size, string $ext = '.jpg'): string
 	{
 		// ensure source file exists before we create directories!

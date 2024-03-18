@@ -19,8 +19,9 @@ use CodeIgniter\Config\BaseService;
  */
 class Services extends BaseService
 {
-    public static function resizer($config = null, bool $getShared=TRUE){
-		$config = $config ?? new \Tomkirsch\Resizer\ResizerConfig();
-		return $getShared ? static::getSharedInstance('resizer', $config) : new \Tomkirsch\Resizer\Resizer($config);
-	}
+    public static function resizer($config = null, bool $getShared = TRUE): \Tomkirsch\Resizer\Resizer
+    {
+        $config = $config ?? new \Tomkirsch\Resizer\ResizerConfig();
+        return $getShared ? static::getSharedInstance('resizer', $config) : new \Tomkirsch\Resizer\Resizer($config);
+    }
 }
