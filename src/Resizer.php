@@ -7,13 +7,12 @@ use CodeIgniter\Images\Handlers\BaseHandler;
 /**
  * Automagically resize a source image with caching using CI's GD image library.
  * If .htaccess doesn't seem to want to recognize the path, try setting CI's App config $uriProtocol to PATH_INFO
+ * Includes a picture() utility to generate responsive images with srcset and sizes attributes.
  **/
 
 class Resizer
 {
-	// modes for picture utilities
-	const MODE_SCREENWIDTH = 'screenwidth';
-	const MODE_DPR = 'dpr';
+	const VERSION = '2.0.0';
 
 	public ?ResizerConfig $config = NULL;
 	public ?BaseHandler $imageLib = NULL;
@@ -29,8 +28,9 @@ class Resizer
 	public function read(string $imageFile, int $size, string $ext = '.jpg')
 	{
 		// random clean
-		if ($this->config->useCache && rand(1, $this->config->randomCleanChance) === 1) {
-			$this->cleanDir(FALSE);
+		if ($this->config->useCache && $this->randomFloat() < $this->config->randomCleanChance) {
+			$cleaned = $this->cleanDir(FALSE);
+			log_message('debug', 'Resizer Lib cleaned cache of ' . count($cleaned) . ' files.');
 		}
 		// load GD image lib
 		if (!$this->imageLib) $this->imageLib = \Config\Services::image('gd');
@@ -209,7 +209,9 @@ class Resizer
 	 */
 	public function publicFile(string $imageFile, int $size, string $ext = '.jpg'): string
 	{
-		return $this->config->rewriteSegment . '/' . $imageFile . $this->config->rewriteSizeSep . $size . $ext;
+		$url = $this->config->rewriteSegment . '/' . $imageFile . $this->config->rewriteSizeSep . $size . $ext;
+		if ($this->config->addBaseUrl) $url = base_url($url);
+		return $url;
 	}
 
 	/**
@@ -244,8 +246,7 @@ class Resizer
 	 * Returns a picture element with source set to the public URL. Options:
 	 * - file: (required) path and base file name without ext, ex: 'img/foo-bar'
 	 * - ext: (optional) file extension with dot. Default is in config.
-	 * - mode: (optional) 'screenwidth' (600w) or 'dpr' (2x). Default is in config.
-	 * - screenwidths: (optional) for screenwidth mode, list the breakpoints to support. Default is in config.
+	 * - breakpoints: (optional) list the screen width breakpoints to support. Default is in config.
 	 * - dprs: (optional) for dpr mode, list the device pixel ratios to support. Default is in config.
 	 * - newlines: (optional) add newlines for readability. Default is in config.
 	 * - lazy: (optional) use data-src or data-srcset with lowres placeholder. Default is in config.
@@ -255,64 +256,55 @@ class Resizer
 	 */
 	public function picture(array $attr, array $imgAttr, array $options, ...$additionalSources): string
 	{
-		// ensure helper is loaded
-		if (!function_exists('picture')) helper('html');
-
-		// default options
+		// merge default options from config
 		$options = array_merge(
 			[
-				'file' => '', // required. path and base file name, ex: 'img/foo-bar'
-				'ext' => $this->config->pictureDefaultExt, // file extension with dot
-				'mode' => $this->config->pictureDefaultMode, // 'screenwidth' (600w) or 'dpr' (2x)
-				'screenwidths' => $this->config->pictureDefaultScreens, // for screenwidth mode, list the breakpoints to support
-				'dprs' => $this->config->pictureDefaultDprs, // for dpr mode, list the device pixel ratios to support
-				'newlines' => $this->config->pictureNewlines, // add newlines for readability
-				'lazy' => $this->config->pictureDefaultLazy, // use data-src or data-srcset with lowres placeholder
-				'lowres' => $this->config->pictureDefaultLowRes, // 'pixel64' (transparent pixel), 'first', 'last', 'custom', or supply the name to be appended to the file option
-				'lowrescustom' => '', // custom HTML for src when lowres === custom
+				'file' => '',
+				'ext' => $this->config->pictureDefaultExt,
+				'breakpoints' => $this->config->pictureDefaultBreakpoints,
+				'dprs' => $this->config->pictureDefaultDprs,
+				'newlines' => $this->config->pictureNewlines,
+				'lazy' => $this->config->pictureDefaultLazy,
+				'lowres' => $this->config->pictureDefaultLowRes,
+				'lowrescustom' => '',
 			],
 			$options
 		);
 
-		// sort screenwidths, highest to lowest
-		rsort($options['screenwidths']);
+		// sanity
+		if (empty($options['file']))  throw new \Exception("Resizer picture() requires a file option");
+		if (empty($options['ext'])) throw new \Exception("Resizer picture() requires an ext option");
+		if (empty($options['breakpoints'])) throw new \Exception("Resizer picture() requires breakpoints");
+		if (empty($options['dprs'])) throw new \Exception("Resizer picture() requires dprs for dpr mode");
+		$options['lazy'] = (bool) $options['lazy'];
+		$nl = (string) $options['newlines'];
 
-		// set data-sizes to "auto" if needed. this is specifically for lazysizes JS library
-		if ($options['lazy'] && $this->config->pictureDefaultAutoSizes && !isset($imgAttr['data-sizes'])) $imgAttr['data-sizes'] = 'auto';
-
-		// remove base_url if it's in there
-		$options['file'] = str_replace(base_url(), '', $options['file']);
-		// add the dog whistle for .htaccess
-		$options['file'] = base_url($this->config->rewriteSegment . '/' . $options['file']);
-		// add the separator
-		$options['file'] .= $this->config->rewriteSizeSep;
-
-		$nl = $options['newlines'];
 		$out = '<picture' . stringify_attributes($attr) . '>';
+
 		// print the additional sources first. browser will use the first element with a matching hint and ignore any following tags, so these are prioritized
 		foreach ($additionalSources as $source) {
 			// allow us to inherit $options
-			$source = array_merge(
-				$options,
-				$source
-			);
-			$out .= $this->pictureSource($source);
+			$out .= $this->pictureSource(array_merge($options, $source));
 		}
+
 		// now handle the "default" source in $options
-		// if dpr mode, we need <source>s for each screenwidth. this causes some bloat, but it's the only way to support dpr AND screen width
-		if ($options['mode'] === self::MODE_DPR) {
-			foreach ($options['screenwidths'] as $screenwidth) {
-				$out .= $this->pictureSource(array_merge($options, [
-					'media' => "(min-width: $screenwidth" . "px)",
-					'screenwidths' => [$screenwidth],
-				]));
+		// we need <source>s for each screenwidth. this causes some bloat, but it's the only way to support dpr AND screen width
+		$list = $options['breakpoints'];
+		rsort($list); // sort from largest to smallest
+		$lastKey = array_key_last($list); // this will not have a media query
+		foreach ($list as $screenwidth) {
+			$sourceOptions = array_merge($options, [
+				'breakpoints' => [$screenwidth],
+			]);
+			// only use media query if this is not the last element
+			if ($screenwidth !== $list[$lastKey]) {
+				$sourceOptions['media'] = "(min-width: $screenwidth" . "px)";
 			}
+			$out .= $this->pictureSource(array_merge($options, $sourceOptions));
 		}
+
 		// img lowres src (fallback for browsers that don't support <picture> or JS)
 		$imgAttr['src'] = $this->lowresSource($options);
-		// set img srcset for when no media queries are satisfied
-		$name = $options['lazy'] ? 'data-srcset' : 'srcset';
-		$imgAttr[$name] = implode(", $nl", $this->pictureSourceSet(array_merge($options, ["mode" => self::MODE_SCREENWIDTH])));
 		$out .= $nl . '<img' . stringify_attributes($imgAttr) . '>';
 		$out .= $nl . '</picture>';
 		return $out;
@@ -326,21 +318,35 @@ class Resizer
 		$options = array_merge(
 			[
 				'media' => NULL, // CSS media for this source, ex: '(min-width: 720px)'
-				'screenwidths' => [], // this should already be set... specifying it here for compiler
+				'breakpoints' => [], // this should already be set... specifying it here for compiler
 			],
 			$options
 		);
-		$nl = $options['newlines'];
+		$nl = (string) $options['newlines'];
 		$out = $nl . '<source';
 		if (!empty($options['media'])) $out .= ' media="' . $options['media'] . '"';
-		if ($options['lazy'] && $options['mode'] == self::MODE_SCREENWIDTH) {
-			$src = $this->lowresSource($options);
-			$out .= ' srcset="' . $src . '"';
-		}
 		$attr = $options['lazy'] ? 'data-srcset' : 'srcset';
 		$out .= ' ' . $nl . $attr . '="' . implode(', ' . $nl, $this->pictureSourceSet($options)) . '"';
 		$out .= '>' . $nl;
 		return $out;
+	}
+
+	/**
+	 * Returns a srcset numeric array for a given set of options. Used by picture() and pictureSource().
+	 */
+	protected function pictureSourceSet(array $options): array
+	{
+		$srcsets = []; // each screenwidth will be a numeric key, and the value will be the srcset string
+		foreach ($options['breakpoints'] as $screenwidth) {
+			$file = $this->publicFile($options['file'], $screenwidth, $options['ext']);
+			// add dpr query and x factor for each screenwidth
+			foreach ($options['dprs'] as $dpr) {
+				$dpr = floatval($dpr);
+				$xtra = ($dpr === 1.0) ? "" : "?dpr=$dpr $dpr" . "x"; // leave 1x descriptors out. note the float comparison!
+				$srcsets[intval($screenwidth) * $dpr] = $file . $xtra;
+			}
+		}
+		return $srcsets;
 	}
 
 	protected function lowresSource(array $options): string
@@ -351,10 +357,12 @@ class Resizer
 				$out = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
 				break;
 			case 'first':
-				$out = $options['file'] . $options['screenwidths'][0] . $options['ext'];
+				$key = array_key_first($options['breakpoints']);
+				$out = $this->publicFile($options['file'], $options['breakpoints'][$key], $options['ext']);
 				break;
 			case 'last':
-				$out = $options['file'] . $options['screenwidths'][count($options['screenwidths']) - 1] . $options['ext'];
+				$key = array_key_last($options['breakpoints']);
+				$out = $this->publicFile($options['file'], $options['breakpoints'][$key], $options['ext']);
 				break;
 			case 'custom':
 				$out = $options['lowrescustom'];
@@ -364,39 +372,6 @@ class Resizer
 		}
 		return $out;
 	}
-
-	/**
-	 * Returns a srcset numeric array for a given set of options. Used by picture() and pictureSource().
-	 */
-	protected function pictureSourceSet(array $options): array
-	{
-		$srcsets = []; // each screenwidth will be a numeric key, and the value will be the srcset string
-		foreach ($options['screenwidths'] as $screenwidth) {
-			$file = $options['file'] . $screenwidth . $options['ext'];
-			// if dpr mode, add dpr query and x factor for each screenwidth
-			if ($options['mode'] === self::MODE_DPR) {
-				foreach ($options['dprs'] as $dpr) {
-					$dpr = floatval($dpr);
-					$xtra = ($dpr === 1.0) ? "" : "?dpr=$dpr $dpr" . "x"; // note the float comparison!
-					$srcsets[intval($screenwidth) * $dpr] = $file . $xtra;
-				}
-			} else {
-				// add w factor, if not zero
-				if ($screenwidth) {
-					$file .= ' ' . $screenwidth . "w";
-				}
-				$srcsets[intval($screenwidth)] = $file;
-			}
-		}
-		// ensure we have a default srcset if no "w" parameters are satisfied. This will be returned at zero index.
-		if ($options['mode'] === self::MODE_SCREENWIDTH) {
-			ksort($srcsets);
-			$firstSrc = array_key_first($srcsets);
-			$srcsets[$firstSrc] = preg_replace('/\s.*/', '', $srcsets[$firstSrc]); // remove "w" from the first srcset
-		}
-		return $srcsets;
-	}
-
 
 	protected function mimeFromExt(string $ext): ?string
 	{
@@ -437,5 +412,10 @@ class Resizer
 				break;
 		}
 		$func($this->imageLib->getResource());
+	}
+
+	protected function randomFloat($min = 0, $max = 1, $includeMax = FALSE): float
+	{
+		return $min + mt_rand(0, (mt_getrandmax() - ($includeMax ? 0 : 1))) / mt_getrandmax() * ($max - $min);
 	}
 }

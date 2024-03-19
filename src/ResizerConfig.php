@@ -14,19 +14,18 @@ class ResizerConfig extends BaseConfig
 	// RewriteRule ^imagerez\/(.+)-([0-9]+)\.(.+) resizer/read?file=$1&size=$2&ext=$3 [NC,QSA]
 	public string $rewriteSizeSep = '-'; // separator from base file name and requested size. must match your .htaccess file regex
 
-	public string $realImagePath = ROOTPATH . '/public'; // real path to source images
+	public string $realImagePath = ROOTPATH . '/public'; // real path to source images. this can be a private folder.
 	public string $resizerCachePath = ROOTPATH . '/writable/resizercache'; // path to store cached image files
+	public bool $addBaseUrl = TRUE; // whether to add base_url() to the output of publicFile()
 
 	public int $ttl = 60 * 60 * 24 * 7; // clean cached images older than this (seconds)
-	public int $randomCleanChance = 100; // library will auto clean cache folder upon file read - helps clean cache of deleted images
+	public float $randomCleanChance = 0.01; // chance of cleaning old images on each image request (default at 10%). set to 0 to disable
 	public ?string $cacheControlHeader = 'public, max-age=2592000'; // Cache-Control header for browser caching (defaults is 30 days)
 
-	public string $pictureDefaultMode = \Tomkirsch\Resizer\Resizer::MODE_SCREENWIDTH; // default mode for picture element, 'screenwidth' or 'dpr'
-	public array $pictureDefaultScreens = [576, 768, 992, 1200, 1400]; // default screenwidth mode sizes for picture element, based off bootstrap breakpoints
+	public array $pictureDefaultBreakpoints = [576, 768, 992, 1200, 1400]; // default sizes for picture element, based off bootstrap breakpoints
 	public array $pictureDefaultDprs = [1, 2]; // default device pixel ratios for dpr mode
 	public string $pictureDefaultExt = '.jpg'; // default extension for picture element with dot
 	public bool $pictureDefaultLazy = FALSE; // default lazy loading for picture element
-	public bool $pictureDefaultAutoSizes = FALSE; // whether data-sizes should be set to "auto" (for lazyload only, see lazySizes documentation)
 	public string $pictureDefaultLowRes = 'pixel64'; // low quality image placeholder: 'pixel64' (transparent pixel), 'first', 'last', 'custom', or supply the name to be appended to the file option
 	public string $pictureNewlines = "\n"; // newlines for picture element output, set to '' for minified output
 }

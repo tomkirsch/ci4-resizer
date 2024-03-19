@@ -114,6 +114,26 @@ Use public URLs for your images.
 
 ```
 <?= img([
-	'src'=>base_url(service('resizer')->publicFile('kitten-src', 600, '.jpg')),
+	'src'=>base_url(Config\Services::resizer()->publicFile('kitten-src', 600, '.jpg')),
 ]) ?>
+```
+
+Use the picture utility to automate breakpoints
+
+```
+Config\Services::resizer()->picture(
+		[ 	// <picture> attr
+			'class' => 'my-picture',
+		],
+		[	// <img> attr
+			'alt' => 'kitten picture',
+		],
+		[	// options
+			'file' => 'kitten-src',
+			'breakpoints' => [576, 768, 992], // custom breakpoints
+			'lowres' => 'first',
+		],
+		// additional <source>s. These take priority.
+		['media' => '(min-width: 600px)', 'breakpoints' => [390]] // show a 390px image if screen is 600px or larger. This will also support DPR (2x)
+	)
 ```
