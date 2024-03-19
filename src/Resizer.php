@@ -80,8 +80,8 @@ class Resizer
 			$cacheExists = TRUE;
 		}
 
+		// if no cache exists, read the image size (performance hit!) and determine if its out of bounds
 		if (!$cacheExists) {
-			// read the image size (performance hit!) and determine if its out of bounds
 			$this->imageLib->withFile($altCache ?? $sourceFile);
 			// upscale check
 			if ($this->config->allowUpscale) {
@@ -130,7 +130,7 @@ class Resizer
 		if ($mime) header("Content-Type: $mime");
 		$headerDate = gmdate('D, d M Y H:i:s T', $sourceTime);
 		header("Last-Modified: $headerDate");
-		header("Cache-control: public, max-age=2592000"); // 1 mo.
+		if ($this->config->cacheControlHeader) header("Cache-control: " . $this->config->cacheControlHeader);
 		// if we have a cache file, read it
 		if ($cacheExists) {
 			header("Content-Length: " . filesize($cacheFile));
@@ -139,6 +139,7 @@ class Resizer
 			// image resource should still exist, output it to the browser using GD function
 			$this->outputResource($extNoDot);
 		}
+		// you should exit the script after this
 	}
 
 	/**

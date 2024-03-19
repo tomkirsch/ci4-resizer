@@ -19,4 +19,5 @@ class ResizerConfig extends BaseConfig
 
 	public int $ttl = 60 * 60 * 24 * 7; // clean cached images older than this (seconds)
 	public int $randomCleanChance = 100; // library will auto clean cache folder upon file read - helps clean cache of deleted images
+	public ?string $cacheControlHeader = 'public, max-age=2592000'; // Cache-Control header for browser caching (defaults is 30 days)
 }
