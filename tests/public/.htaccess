@@ -27,8 +27,8 @@ Options All -Indexes
 	RewriteRule ^ http://%1%{REQUEST_URI} [R=301,L]
 	
 	# Image resizer
-	# imagerez/some-folder/filename-1024.jpg
-	RewriteRule ^imagerez\/(.+)-([0-9]+)\.(.+) resizer/read?file=$1&size=$2&ext=$3 [NC,QSA]
+	# imagerez/some-folder/filename-1024.jpg.webp
+	RewriteRule ^imagerez\/(.+)-([0-9]+)(\.\w+)(\.\w+)? resizer/read?file=$1&size=$2&ext=$3&destExt=$4 [NC,QSA]
 
 	# Checks to see if the user is attempting to access a valid file,
 	# such as an image or css document, if this isn't true it sends the

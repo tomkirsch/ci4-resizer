@@ -24,7 +24,8 @@ class ResizerConfig extends BaseConfig
 
 	public array $pictureDefaultBreakpoints = [576, 768, 992, 1200, 1400]; // default sizes for picture element, based off bootstrap breakpoints
 	public array $pictureDefaultDprs = [1, 2]; // default device pixel ratios for dpr mode
-	public string $pictureDefaultExt = '.jpg'; // default extension for picture element with dot
+	public string $pictureDefaultSourceExt = '.jpg'; // default source extension for picture element
+	public string $pictureDefaultDestExt = ''; // default output extension for picture element. leave empty to use source extension by default.
 	public bool $pictureDefaultLazy = FALSE; // default lazy loading for picture element
 	public string $pictureDefaultLowRes = 'pixel64'; // low quality image placeholder: 'pixel64' (transparent pixel), 'first', 'last', 'custom', or supply the name to be appended to the file option
 	public string $pictureNewlines = "\n"; // newlines for picture element output, set to '' for minified output

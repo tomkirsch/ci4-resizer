@@ -53,20 +53,21 @@ class Resizer extends Controller
 	// output image to browser
 	public function read()
 	{
-		$imageFile = $this->request->getGet('file');
+		$request = \Config\Services::request();
+		$imageFile = $request->getGet('file');
 		if (empty($imageFile)) throw new \Exception('No file given!');
-		$size = $this->request->getGet('size');
+		$size = $request->getGet('size');
 		if (empty($size)) throw new \Exception('No size given!');
-		$ext = $this->request->getGet('ext');
+		$ext = $request->getGet('ext');
 		if (empty($ext)) throw new \Exception('No ext given!');
-		if (substr($ext, 0, 1) !== '.') $ext = '.' . $ext;
+		$destExt = $request->getGet('destExt') ?? $ext;
 
 		// read the device pixel ratio
-		$dpr = $this->request->getGet('dpr') ?? 1;
+		$dpr = $request->getGet('dpr') ?? 1;
 		$size = floor(intval($size) * floatval($dpr));
 
 		// generate cache file and spit out the actual image
-		service('resizer')->read($imageFile, $size, $ext);
+		\Config\Services::resizer()->read($imageFile, $size, $ext, $destExt);
 		// exit the script
 		exit;
 	}
@@ -74,17 +75,18 @@ class Resizer extends Controller
 	// cleanup cache for given file
 	public function cleanfile()
 	{
-		$file = $this->request->getGet('file');
+		$request = \Config\Services::request();
+		$file = $request->getGet('file');
 		if (empty($imageFile)) throw new \Exception('No file given!');
 		$parts = explode('.', $file);
-		service('resizer')->cleanFile($parts[0], '.' . $parts[1]);
+		\Config\Services::resizer()->cleanFile($parts[0], '.' . $parts[1]);
 		print 'cache cleaned for ' . $file . ' ' . anchor('', 'Back to home');
 	}
 
 	// cleanup all cache
 	public function cleandir($force = FALSE)
 	{
-		service('resizer')->cleanDir((bool) $force);
+		\Config\Services::resizer()->cleanDir((bool) $force);
 		print 'cache cleaned ' . anchor('', 'Back to home');
 	}
 }
@@ -94,8 +96,8 @@ Modify .htaccess to use the resizer controller. Ensure characters match `$resize
 
 ```
 	# Image resizer
-	# imagerez/some-folder/filename-1024.jpg
-	RewriteRule ^imagerez\/(.+)-([0-9]+)\.(.+) resizer/read?file=$1&size=$2&ext=$3 [NC,QSA]
+	# imagerez/some-folder/filename-1024.jpg.webp
+	RewriteRule ^imagerez\/(.+)-([0-9]+)(\.\w+)(\.\w+)? resizer/read?file=$1&size=$2&ext=$3&destExt=$4 [NC,QSA]
 ```
 
 Add cache dir to .gitignore:

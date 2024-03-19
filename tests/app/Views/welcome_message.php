@@ -12,22 +12,22 @@
 	<p><?= anchor('resizer/cleandir/1', 'Force clean the cache') ?></p>
 	<p>a simple 300px image</p>
 	<?= img([
-		'src' => Config\Services::resizer()->publicFile('kitten-src', 300, '.jpg'),
+		'src' => Config\Services::resizer()->publicFile('kitten-src', 300),
 		'style' => 'display: block; margin: 1rem 0;',
 	]) ?>
 	<hr>
-	<p>a 300px image with 2x DPR support using GET query string (should be 600px on hires browser)</p>
+	<p>a 300px image converted to webP with 2x DPR support using GET query string (should be 600px on hires browser)</p>
 	<img style="display: block; margin: 1rem 0;" srcset="
-		<?= Config\Services::resizer()->publicFile('kitten-src', 300, '.jpg') ?>, 
-		<?= Config\Services::resizer()->publicFile('kitten-src', 300, '.jpg') ?>?dpr=2 2x">
+		<?= Config\Services::resizer()->publicFile('kitten-src', 300, 'jpg', 'webp') ?>, 
+		<?= Config\Services::resizer()->publicFile('kitten-src', 300, 'jpg', 'webp') ?>?dpr=2 2x">
 	<hr>
 	<p>a 3000px request (server-side upscale prevention, returns the source file's original width OR config's $maxSize)</p>
 	<?= img([
-		'src' => Config\Services::resizer()->publicFile('kitten-src', 3000, '.jpg'),
+		'src' => Config\Services::resizer()->publicFile('kitten-src', 3000),
 		'style' => 'display: block; margin: 1rem 0; max-width: 300px; height: auto;',
 	]) ?>
 	<hr>
-	<p>Picture utility. Makes an image at the default breakpoints, with the smallest as an LQIP.</p>
+	<p>Picture utility. Makes an image at the default breakpoints, with the smallest as an LQIP and convert to webP.</p>
 	<?php
 	$out = Config\Services::resizer()->picture(
 		[ 	// <picture> attr
@@ -39,7 +39,8 @@
 		],
 		[	// options
 			'file' => 'kitten-src',
-			'mode' => 'screenwidth',
+			'sourceExt' => 'jpg',
+			'destExt' => 'webp',
 			'lowres' => 'first',
 		]
 	);
