@@ -15,16 +15,16 @@ class Resizer extends Controller
 		if (empty($imageFile)) throw new \Exception('No file given!');
 		$size = $request->getGet('size');
 		if (empty($size)) throw new \Exception('No size given!');
-		$ext = $request->getGet('ext');
-		if (empty($ext)) throw new \Exception('No ext given!');
-		$destExt = $request->getGet('destExt') ?? $ext;
+		$sourceExt = $request->getGet('sourceExt');
+		if (empty($sourceExt)) throw new \Exception('No source extention given!');
+		$destExt = $request->getGet('destExt') ?? $sourceExt;
 
 		// read the device pixel ratio
 		$dpr = $request->getGet('dpr') ?? 1;
 		$size = floor(intval($size) * floatval($dpr));
 
 		// generate cache file and spit out the actual image
-		\Config\Services::resizer()->read($imageFile, $size, $ext, $destExt);
+		\Config\Services::resizer()->read($imageFile, $size, $sourceExt, $destExt);
 		// exit the script
 		exit;
 	}
