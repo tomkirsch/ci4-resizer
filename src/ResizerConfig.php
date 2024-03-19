@@ -21,8 +21,8 @@ class ResizerConfig extends BaseConfig
 	public int $randomCleanChance = 100; // library will auto clean cache folder upon file read - helps clean cache of deleted images
 	public ?string $cacheControlHeader = 'public, max-age=2592000'; // Cache-Control header for browser caching (defaults is 30 days)
 
-	public string $pictureDefaultMode = 'screenwidth'; // default mode for picture element, 'screenwidth' or 'dpr'
-	public array $pictureDefaultSizes = [576, 768, 992, 1200, 1400]; // default screenwidth mode sizes for picture element, based off bootstrap breakpoints
+	public string $pictureDefaultMode = \Tomkirsch\Resizer\Resizer::MODE_SCREENWIDTH; // default mode for picture element, 'screenwidth' or 'dpr'
+	public array $pictureDefaultScreens = [576, 768, 992, 1200, 1400]; // default screenwidth mode sizes for picture element, based off bootstrap breakpoints
 	public array $pictureDefaultDprs = [1, 2]; // default device pixel ratios for dpr mode
 	public string $pictureDefaultExt = '.jpg'; // default extension for picture element with dot
 	public bool $pictureDefaultLazy = FALSE; // default lazy loading for picture element
