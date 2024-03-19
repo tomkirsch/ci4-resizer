@@ -2,12 +2,38 @@
 
 ## Installation
 
+Create the config file in Config/ResizerConfig.php
+
+```
+<?php
+
+namespace App\Config;
+
+class ResizerConfig extends \Tomkirsch\Resizer\ResizerConfig
+{
+	public bool $useCache = TRUE; // turning this off may cause performance issues
+	public bool $allowUpscale = FALSE; // whether to allow upscaling images, recommended FALSE (note this could break a server if a user requests a very large image)
+	public int $maxSize = 0; // max output size for all images, set to 0 to disable
+
+	public string $rewriteSegment = 'imagerez'; // this "folder" lets htaccess know to rewrite the request to Resizer controller. must match your .htaccess file regex
+	// RewriteRule ^imagerez\/(.+)-([0-9]+)\.(.+) resizer/read?file=$1&size=$2&ext=$3 [NC,QSA]
+	public string $rewriteSizeSep = '-'; // separator from base file name and requested size. must match your .htaccess file regex
+
+	public string $realImagePath = ROOTPATH . '/public'; // real path to source images
+	public string $resizerCachePath = ROOTPATH . '/writable/resizercache'; // path to store cached image files
+
+	public int $ttl = 60 * 60 * 24 * 7; // clean cached images older than this (seconds)
+	public int $randomCleanChance = 100; // library will auto clean cache folder upon file read - helps clean cache of deleted images
+}
+
+```
+
 Create the service in Config/Services.php
 
 ```
 	public static function resizer($config = null, bool $getShared = TRUE): \Tomkirsch\Resizer\Resizer
     {
-        $config = $config ?? new \Tomkirsch\Resizer\ResizerConfig();
+        $config = $config ?? new ResizerConfig();
         return $getShared ? static::getSharedInstance('resizer', $config) : new \Tomkirsch\Resizer\Resizer($config);
     }
 ```
@@ -34,8 +60,13 @@ class Resizer extends Controller
 		$ext = $this->request->getGet('ext');
 		if (empty($ext)) throw new \Exception('No ext given!');
 		if (substr($ext, 0, 1) !== '.') $ext = '.' . $ext;
+
+		// read the device pixel ratio
+		$dpr = $this->request->getGet('dpr') ?? 1;
+		$size = floor(intval($size) * floatval($dpr));
+
 		// generate cache file and spit out the actual image
-		service('resizer')->read($imageFile, intval($size), $ext);
+		service('resizer')->read($imageFile, $size, $ext);
 		// exit the script
 		exit;
 	}
@@ -57,7 +88,6 @@ class Resizer extends Controller
 		print 'cache cleaned ' . anchor('', 'Back to home');
 	}
 }
-
 ```
 
 Modify .htaccess to use the resizer controller. Ensure characters match `$resizerConfig->rewriteSegment` and `$resizerConfig->rewriteSizeSep`

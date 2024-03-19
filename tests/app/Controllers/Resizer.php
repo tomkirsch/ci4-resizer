@@ -17,8 +17,13 @@ class Resizer extends Controller
 		$ext = $this->request->getGet('ext');
 		if (empty($ext)) throw new \Exception('No ext given!');
 		if (substr($ext, 0, 1) !== '.') $ext = '.' . $ext;
+
+		// read the device pixel ratio
+		$dpr = $this->request->getGet('dpr') ?? 1;
+		$size = floor(intval($size) * floatval($dpr));
+
 		// generate cache file and spit out the actual image
-		service('resizer')->read($imageFile, intval($size), $ext);
+		service('resizer')->read($imageFile, $size, $ext);
 		// exit the script
 		exit;
 	}

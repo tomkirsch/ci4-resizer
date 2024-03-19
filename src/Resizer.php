@@ -61,8 +61,8 @@ class Resizer
 			}
 		}
 
-		if (!$this->config->useCache || !file_exists($cacheFile)) {
-			// no cache setting, or no cache for this size
+		if (!file_exists($cacheFile)) {
+			// no cache for this size
 			$createCache = TRUE;
 			$cacheExists = FALSE;
 		} else if ($sourceTime > filemtime($cacheFile)) {
@@ -101,8 +101,18 @@ class Resizer
 			}
 		}
 
-		// check cache file once again
+		// using cache?
+		if (!$this->config->useCache) {
+			$cacheExists = FALSE;
+			$createCache = FALSE;
+		}
+
+		// check cache file once again, and generate the image if necessary
 		if (!$cacheExists) {
+			// load the image if we haven't already
+			if (!$this->imageLib->getWidth()) {
+				$this->imageLib->withFile($sourceFile);
+			}
 			// resize the image (performance hit!)
 			$this->imageLib->resize($size, $size, TRUE, 'width');
 			if ($createCache) {
