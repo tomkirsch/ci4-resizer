@@ -83,8 +83,8 @@ class Resizer
 		// if no cache exists, read the image size (performance hit!) and determine if its out of bounds
 		if (!$cacheExists) {
 			$this->imageLib->withFile($altCache ?? $sourceFile);
-			// upscale check
-			if ($this->config->allowUpscale) {
+			// disallow upscale check
+			if (!$this->config->allowUpscale) {
 				$sourceWidth = $this->imageLib->getWidth();
 				$sourceHeight = $this->imageLib->getHeight();
 				if ($sourceWidth < $size && $sourceHeight < $size) {
@@ -235,6 +235,161 @@ class Resizer
 		}
 		return $cacheFile;
 	}
+
+	/**
+	 * Returns a picture element with source set to the public URL. This is useful for generating responsive images in views.
+	 * Note that every element in $sources will inherit the $options array, so you can set defaults there.
+	 */
+	public function picture(array $attr, array $imgAttr, array $options, ...$sources): string
+	{
+		// ensure helper is loaded
+		if (!function_exists('picture')) helper('html');
+
+		// default options
+		$options = array_merge(
+			[
+				'file' => '', // required. path and base file name, ex: 'img/foo-bar'
+				'ext' => $this->config->pictureDefaultExt, // file extension with dot
+				'mode' => $this->config->pictureDefaultMode, // 'screenwidth' (600w) or 'dpr' (2x)
+				'screenwidths' => $this->config->pictureDefaultSizes, // for screenwidth mode, list the breakpoints to support
+				'dprs' => $this->config->pictureDefaultDprs, // for dpr mode, list the device pixel ratios to support
+				'newlines' => $this->config->pictureNewlines, // add newlines for readability
+				'lazy' => $this->config->pictureDefaultLazy, // use data-src or data-srcset with lowres placeholder
+				'lowres' => $this->config->pictureDefaultLowRes, // 'pixel64' (transparent pixel), 'first', 'last', 'custom', or supply the name to be appended to the file option
+				'lowrescustom' => '', // custom HTML for src when lowres === custom
+			],
+			$options
+		);
+
+		// set data-sizes to "auto" if needed
+		if ($options['lazy'] && $this->config->pictureDefaultAutoSizes && !isset($imgAttr['data-sizes'])) $imgAttr['data-sizes'] = 'auto';
+
+		// remove base_url
+		$options['file'] = str_replace(base_url(), '', $options['file']);
+		// add the dog whistle for .htaccess
+		$options['file'] = base_url($this->config->rewriteSegment . '/' . $options['file']);
+		// add the final dash
+		$options['file'] .= '-';
+
+		$nl = $options['newlines'];
+		$out = '<picture' . stringify_attributes($attr) . '>';
+		// first source, if screenwidth mode
+		if ($options['mode'] === 'screenwidth') $out .= $this->pictureSource($options);
+		// additional sources
+		foreach ($sources as $source) {
+			$source = array_merge(
+				$options,
+				$source
+			); // allow us to inherit $options
+			$out .= $this->pictureSource($source);
+		}
+		// img src
+		switch ($options['lowres']) {
+			case 'pixel64':
+				$imgAttr['src'] = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+				break;
+			case 'first':
+				$imgAttr['src'] = $options['file'] . $options['screenwidths'][0] . $options['ext'];
+				break;
+			case 'last':
+				$imgAttr['src'] = $options['file'] . $options['screenwidths'][count($options['screenwidths']) - 1] . $options['ext'];
+				break;
+			case 'custom':
+				$imgAttr['src'] = $options['lowrescustom'];
+				break;
+			default:
+				$imgAttr['src'] = $options['file'] . $options['lowres'] . $options['ext'];
+		}
+		// if dpr mode, add first source as attributes
+		if ($options['mode'] === 'dpr') {
+			$name = $options['lazy'] ? 'data-srcset' : 'srcset';
+			$imgAttr[$name] = implode(", $nl", $this->pictureSourceSet($options));
+		}
+		$out .= ' <img' . stringify_attributes($imgAttr) . '>';
+		$out .= '</picture>';
+		return $out;
+	}
+
+	/**
+	 * Returns a <source> element with srcset and media attributes. Used by picture().
+	 */
+	protected function pictureSource(array $options): string
+	{
+		$options = array_merge(
+			[
+				'media' => NULL, // CSS media for this source, ex: '(min-width: 720px)'
+				'screenwidths' => [], // this should already be set... specifying it here for compiler
+			],
+			$options
+		);
+		$nl = $options['newlines'];
+		$out = $nl . '<source';
+		if (!empty($options['media'])) $out .= ' media="' . $options['media'] . '"';
+		if ($options['lazy'] && $options['mode'] == 'screenwidth') {
+			$src = '';
+			switch ($options['lowres']) {
+				case 'pixel64':
+					$src = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+					break;
+				case 'first':
+					$src = $options['file'] . $options['screenwidths'][0] . $options['ext'];
+					break;
+				case 'last':
+					$src = $options['file'] . $options['screenwidths'][count($options['screenwidths']) - 1] . $options['ext'];
+					break;
+				case 'custom':
+					$src = $options['lowrescustom'];
+					break;
+				default:
+					$src = $options['file'] . $options['lowres'] . $options['ext'];
+			}
+			$out .= ' srcset="' . $src . '"';
+		}
+
+		$attr = $options['lazy'] ? 'data-srcset' : 'srcset';
+		$out .= ' ' . $nl . $attr . '="' . implode(', ' . $nl, $this->pictureSourceSet($options)) . '"';
+		$out .= '>' . $nl;
+		return $out;
+	}
+
+	/**
+	 * Returns a srcset string for a given set of options. Used by picture() and pictureSource().
+	 */
+	protected function pictureSourceSet(array $options): array
+	{
+		$srcsets = [];
+		for ($i = 0; $i < count($options['screenwidths']); $i++) {
+			$file = $options['file'] . $options['screenwidths'][$i] . $options['ext'];
+			// if dpr mode, add dpr query and x factor
+			if ($options['mode'] === 'dpr') {
+				foreach ($options['dprs'] as $dpr) {
+					$xtra = "?dpr=$dpr $dpr" . "x";
+					$srcsets[] = $file . $xtra;
+				}
+			} else {
+				// add w factor
+				$wFactor = $options['screenwidths'][$i] ?? '';
+				if ($wFactor) {
+					$w = stristr($options['screenwidths'][$i], 'w') ? '' : 'w';
+					$file .= ' ' . $options['screenwidths'][$i] . $w;
+				}
+				$srcsets[$wFactor] = $file; // note the key used here
+			}
+		}
+		// if using screenwidth mode, ensure we have a default src if the screen width falls below the smallest size (in dpr mode, this situation is handled by the 1x src)
+		if ($options['mode'] === 'screenwidth') {
+			if (!isset($srcsets[''])) {
+				$firstKey = array_key_first($srcsets);
+				// remove w factor and set as the default src
+				$srcsets[''] = preg_replace('/\s.*/', '', $srcsets[$firstKey]);
+				unset($srcsets[$firstKey]);
+			}
+			ksort($srcsets); // sort by key
+			$srcsets = array_values($srcsets); // reindex
+		}
+		return $srcsets;
+	}
+
 
 	protected function mimeFromExt(string $ext): ?string
 	{
