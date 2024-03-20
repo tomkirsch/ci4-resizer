@@ -25,11 +25,10 @@ class Resizer
 	/**
 	 * Reads image file and outputs contents via readfile() or GD function (ie. imagejpeg()). If the source is newer than the cache, it is automatically cleaned. Note that all output buffering is cleared!
 	 */
-	public function read(string $imageFile, int $size, string $sourceExt = '.jpg', ?string $destExt = NULl)
+	public function read(string $imageFile, int $size, ?string $sourceExt = NULL, ?string $destExt = NULl)
 	{
-		if (substr($sourceExt, 0, 1) !== '.') $sourceExt = '.' . $sourceExt;
-		$destExt = $destExt ?? $sourceExt;
-		if (substr($destExt, 0, 1) !== '.') $destExt = '.' . $destExt;
+		$sourceExt = $this->ensureDot($sourceExt ?? $this->config->pictureDefaultSourceExt);
+		$destExt = $this->ensureDot($destExt ?? empty($this->config->pictureDefaultDestExt) ? $sourceExt : $this->config->pictureDefaultDestExt);
 
 		// random clean
 		if ($this->config->useCache && $this->randomFloat() < $this->config->randomCleanChance) {
@@ -130,6 +129,9 @@ class Resizer
 				$this->imageLib->save($cacheFile);
 				$cacheExists = TRUE;
 			}
+		} else {
+			// cache exists, touch the file to update the mtime
+			touch($cacheFile);
 		}
 
 		// remove any CI output buffering
@@ -169,8 +171,8 @@ class Resizer
 		$iterator = new \RecursiveIteratorIterator($filter);
 		$files = [];
 		foreach ($iterator as $info) {
-			// delete file if $forceCleanAll, or file is older than our ttl
-			$expired = $this->config->ttl ? $info->getMTime() + $this->config->ttl > time() : FALSE;
+			// delete file if $forceCleanAll, or file mtime is older than our ttl
+			$expired = $this->config->ttl ? $info->getMTime() + $this->config->ttl < time() : FALSE;
 			if ($forceCleanAll || $expired) {
 				$file = $info->getRealPath();
 				try {
@@ -185,17 +187,17 @@ class Resizer
 	}
 
 	/**
-	 * Cleans all cache files for a given image. Returns an array of files deleted.
+	 * Cleans all cache files for a given image using a simple stristr() match. Returns an array of files deleted.
 	 */
-	public function cleanFile(string $imageFile): array
+	public function cleanFile(string $pattern): array
 	{
 		$dir = new \RecursiveDirectoryIterator($this->config->resizerCachePath);
-		$filter = new \RecursiveCallbackFilterIterator($dir, function ($current, $key, $iterator) use ($imageFile) {
+		$filter = new \RecursiveCallbackFilterIterator($dir, function ($current, $key, $iterator) use ($pattern) {
 			// Skip hidden files and directories.
 			if ($current->getFilename()[0] === '.') return FALSE;
 			if ($current->isDir()) return TRUE; // recursive
 			// only delete files with the given filename
-			return stristr($current->getFilename(), $imageFile);
+			return stristr($current->getFilename(), $pattern);
 		});
 		$files = [];
 		$iterator = new \RecursiveIteratorIterator($filter);
@@ -214,11 +216,10 @@ class Resizer
 	/**
 	 * Returns a public URL for a given image file and size. This is useful for generating image URLs in views.
 	 */
-	public function publicFile(string $imageFile, int $size, string $sourceExt = '.jpg', ?string $destExt = NULL): string
+	public function publicFile(string $imageFile, int $size, ?string $sourceExt = NULL, ?string $destExt = NULL): string
 	{
-		if (substr($sourceExt, 0, 1) !== '.') $sourceExt = '.' . $sourceExt;
-		$destExt = $destExt ?? $sourceExt;
-		if (substr($destExt, 0, 1) !== '.') $destExt = '.' . $destExt;
+		$sourceExt = $this->ensureDot($sourceExt ?? $this->config->pictureDefaultSourceExt);
+		$destExt = $this->ensureDot($destExt ?? empty($this->config->pictureDefaultDestExt) ? $sourceExt : $this->config->pictureDefaultDestExt);
 
 		$url = $this->config->rewriteSegment . '/' . $imageFile . $this->config->rewriteSizeSep . $size . $sourceExt . $destExt;
 		if ($this->config->addBaseUrl) $url = base_url($url);
@@ -228,20 +229,19 @@ class Resizer
 	/**
 	 * Returns the path to the source file. This is useful for working with server-side file operations.
 	 */
-	public function sourceFile(string $imageFile, string $ext = '.jpg'): string
+	public function sourceFile(string $imageFile, ?string $sourceExt = NULL): string
 	{
-		if (substr($ext, 0, 1) !== '.') $ext = '.' . $ext;
-		return $this->config->realImagePath . '/' . $imageFile . $ext;
+		$sourceExt = $this->ensureDot($sourceExt ?? $this->config->pictureDefaultSourceExt);
+		return $this->config->realImagePath . '/' . $imageFile . $sourceExt;
 	}
 
 	/**
 	 * Gets the path + name of the cache file, and ensures the path exists.
 	 */
-	public function cacheFile(string $imageFile, int $size, string $sourceExt = '.jpg', ?string $destExt = NULL): string
+	public function cacheFile(string $imageFile, int $size, ?string $sourceExt = NULL, ?string $destExt = NULL): string
 	{
-		if (substr($sourceExt, 0, 1) !== '.') $sourceExt = '.' . $sourceExt;
-		$destExt = $destExt ?? $sourceExt;
-		if (substr($destExt, 0, 1) !== '.') $destExt = '.' . $destExt;
+		$sourceExt = $this->ensureDot($sourceExt ?? $this->config->pictureDefaultSourceExt);
+		$destExt = $this->ensureDot($destExt ?? empty($this->config->pictureDefaultDestExt) ? $sourceExt : $this->config->pictureDefaultDestExt);
 
 		// ensure source file exists before we create directories!
 		$sourceFile = $this->sourceFile($imageFile, $sourceExt);
@@ -293,8 +293,9 @@ class Resizer
 		if (empty($options['file']))  throw new \Exception("Resizer picture() requires a file option");
 		if (empty($options['sourceExt'])) throw new \Exception("Resizer picture() requires an sourceExt option");
 		if (empty($options['breakpoints'])) throw new \Exception("Resizer picture() requires breakpoints");
-		if (empty($options['dprs'])) throw new \Exception("Resizer picture() requires dprs for dpr mode");
-		$options['destExt'] = empty($options['destExt']) ? $options['sourceExt'] : $options['destExt']; // inherit source ext if not set
+		if (empty($options['dprs'])) $options['dprs'] = [1];
+		$options['sourceExt'] = $this->ensureDot($options['sourceExt']);
+		$options['destExt'] = $this->ensureDot(empty($options['destExt']) ? $options['sourceExt'] : $options['destExt']); // inherit source ext if not set
 		$options['lazy'] = (bool) $options['lazy'];
 		$nl = (string) $options['newlines'];
 
@@ -443,5 +444,11 @@ class Resizer
 	protected function randomFloat($min = 0, $max = 1, $includeMax = FALSE): float
 	{
 		return $min + mt_rand(0, (mt_getrandmax() - ($includeMax ? 0 : 1))) / mt_getrandmax() * ($max - $min);
+	}
+
+	protected function ensureDot(string $ext): string
+	{
+		if (empty($ext)) throw new \Exception("Resizer requires a file extension");
+		return substr($ext, 0, 1) === '.' ? $ext : '.' . $ext;
 	}
 }

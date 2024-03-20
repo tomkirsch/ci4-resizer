@@ -9,7 +9,11 @@
 </head>
 
 <body>
-	<p><?= anchor('resizer/cleandir/1', 'Force clean the cache') ?></p>
+	<p>
+		<?= anchor('resizer/cleandir', 'Clean expired cache') ?> |
+		<?= anchor('resizer/cleanfile?file=kitten-src', 'Force clean all cached versions of the image') ?> |
+		<?= anchor('resizer/cleandir?force=1', 'Force clean entire cache') ?>
+	</p>
 	<p>a simple 300px image</p>
 	<?= img([
 		'src' => Config\Services::resizer()->publicFile('kitten-src', 300),
