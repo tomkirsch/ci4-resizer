@@ -7,11 +7,9 @@ Create the config file `app/Config/ResizerConfig.php`
 ```
 <?php
 
-namespace Tomkirsch\Resizer;
+namespace Config;
 
-use CodeIgniter\Config\BaseConfig;
-
-class ResizerConfig extends BaseConfig
+class ResizerConfig extends \Tomkirsch\Resizer\ResizerConfig
 {
 	public bool $useCache = TRUE; // turning this off may cause performance issues
 	public bool $allowUpscale = FALSE; // whether to allow upscaling images, recommended FALSE (note this could break a server if a user requests a very large image)
@@ -36,6 +34,7 @@ class ResizerConfig extends BaseConfig
 	public string $pictureDefaultLowRes = 'pixel64'; // low quality image placeholder: 'pixel64' (transparent pixel), 'first', 'last', 'custom', or supply the name to be appended to the file option
 	public string $pictureNewlines = "\n"; // newlines for picture element output, set to '' for minified output
 }
+
 ```
 
 Create the service in `app/Config/Services.php`
