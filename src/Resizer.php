@@ -25,7 +25,7 @@ class Resizer
 	/**
 	 * Reads image file and outputs contents via readfile() or GD function (ie. imagejpeg()). If the source is newer than the cache, it is automatically cleaned. Note that all output buffering is cleared!
 	 */
-	public function read(string $imageFile, int $size, ?string $sourceExt = NULL, ?string $destExt = NULl)
+	public function read(string $imageFile, int $size, ?string $sourceExt = NULL, ?string $destExt = NULL)
 	{
 		$sourceExt = $this->ensureDot($sourceExt ?? $this->config->pictureDefaultSourceExt);
 		$destExt = $this->ensureDot($destExt ?? empty($this->config->pictureDefaultDestExt) ? $sourceExt : $this->config->pictureDefaultDestExt);
@@ -49,9 +49,14 @@ class Resizer
 			foreach (glob($this->config->resizerCachePath . '/' . $imageFile . "*") as $altFile) {
 				// match the filename pattern
 				$matches = [];
-				preg_match('/(.+)-([0-9]+)(\.\w+)(\.\w+)/', $altFile, $matches);
-				list($altBaseName, $width, $ignore, $altExt) = array_slice($matches, 1);
-				if (!is_numeric($width) || $altExt !== $destExt) continue; // ensure cache file is in the same format as the destination extension
+				// note that the dest ext is NOT optional, it should be in ALL file names
+				preg_match('/(.+)-([0-9]+)([.]\w+)([.]\w+)/', $altFile, $matches);
+				if (count($matches) < 5) {
+					log_message('debug', 'Resizer Lib encountered an improperly named cache file ' . $altFile);
+					continue;
+				}
+				list($altBaseName, $width, $altSourceExt, $altDestExt) = array_slice($matches, 1);
+				if (!is_numeric($width) || $altDestExt !== $destExt) continue; // ensure cache file is in the same format as the destination extension
 				$width = intval($width);
 				if ($width < $size) continue; // too small!
 				$cacheMap[$width] = $altFile;

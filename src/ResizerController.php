@@ -25,7 +25,8 @@ class ResizerController extends Controller
         if (empty($size)) throw new \Exception('No size given!');
         $sourceExt = $request->getGet('sourceExt');
         if (empty($sourceExt)) throw new \Exception('No source extention given!');
-        $destExt = $request->getGet('destExt') ?? $sourceExt;
+        $destExt = $request->getGet('destExt');
+        if (empty($destExt)) $destExt = NULL;
 
         // read the device pixel ratio
         $dpr = $request->getGet('dpr') ?? 1;
