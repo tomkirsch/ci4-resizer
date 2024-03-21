@@ -28,7 +28,10 @@ class Resizer
 	public function read(string $imageFile, int $size, ?string $sourceExt = NULL, ?string $destExt = NULL)
 	{
 		$sourceExt = $this->ensureDot($sourceExt ?? $this->config->pictureDefaultSourceExt);
-		$destExt = $this->ensureDot($destExt ?? empty($this->config->pictureDefaultDestExt) ? $sourceExt : $this->config->pictureDefaultDestExt);
+		if ($destExt === NULL) {
+			$destExt = empty($this->config->pictureDefaultDestExt) ? $sourceExt : $this->config->pictureDefaultDestExt;
+		}
+		$destExt = $this->ensureDot($destExt);
 
 		// random clean
 		if ($this->config->useCache && $this->randomFloat() < $this->config->randomCleanChance) {
@@ -223,8 +226,14 @@ class Resizer
 	 */
 	public function publicFile(string $imageFile, int $size, ?string $sourceExt = NULL, ?string $destExt = NULL): string
 	{
-		$sourceExt = $this->ensureDot($sourceExt ?? $this->config->pictureDefaultSourceExt);
-		$destExt = $this->ensureDot($destExt ?? empty($this->config->pictureDefaultDestExt) ? $sourceExt : $this->config->pictureDefaultDestExt);
+		if ($sourceExt === NULL) {
+			$sourceExt = $this->config->pictureDefaultSourceExt;
+		}
+		$sourceExt = $this->ensureDot($sourceExt);
+		if ($destExt === NULL) {
+			$destExt = empty($this->config->pictureDefaultDestExt) ? $sourceExt : $this->config->pictureDefaultDestExt;
+		}
+		$destExt = $this->ensureDot($destExt);
 
 		$url = $this->config->rewriteSegment . '/' . $imageFile . $this->config->rewriteSizeSep . $size . $sourceExt . $destExt;
 		if ($this->config->addBaseUrl) $url = base_url($url);
