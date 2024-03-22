@@ -234,6 +234,7 @@ class Resizer
 			$destExt = empty($this->config->pictureDefaultDestExt) ? $sourceExt : $this->config->pictureDefaultDestExt;
 		}
 		$destExt = $this->ensureDot($destExt);
+		if ($sourceExt === $destExt) $destExt = ''; // remove dest ext if it's the same as source
 
 		$url = $this->config->rewriteSegment . '/' . $imageFile . $this->config->rewriteSizeSep . $size . $sourceExt . $destExt;
 		if ($this->config->addBaseUrl) $url = base_url($url);
