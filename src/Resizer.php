@@ -2,14 +2,45 @@
 
 namespace Tomkirsch\Resizer;
 
+use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\Images\Handlers\BaseHandler;
+
+/**
+ * Stores information about a base image file, so we can create consitently named files
+ */
+class ResizerImage
+{
+	/**
+	 * The image path and BASE file name (with no extension)
+	 */
+	public string $baseName;
+	/**
+	 * The requested width of the image
+	 */
+	public int $width;
+	/**
+	 * The source file extension. If NULL, it uses the default from the config.
+	 */
+	public ?string $sourceExt;
+	/**
+	 * The destination file extension. If NULL, it is assumed to be the same as the source.
+	 */
+	public ?string $destExt;
+
+	public function __construct(string $baseName, int $width, string $sourceExt, string $destExt)
+	{
+		$this->baseName = $baseName;
+		$this->width = $width;
+		$this->sourceExt = $sourceExt;
+		$this->destExt = $destExt;
+	}
+}
 
 /**
  * Automagically resize a source image with caching using CI's GD image library.
  * If .htaccess doesn't seem to want to recognize the path, try setting CI's App config $uriProtocol to PATH_INFO
  * Includes a picture() utility to generate responsive images with srcset and sizes attributes.
  **/
-
 class Resizer
 {
 	const VERSION = '2.0.0';
@@ -23,17 +54,143 @@ class Resizer
 	}
 
 	/**
-	 * Reads image file and outputs contents via readfile() or GD function (ie. imagejpeg()). If the source is newer than the cache, it is automatically cleaned. Note that all output buffering is cleared!
+	 * Parses an image request to get the base name, width, source extension, and destination extension.
+	 * If your .htaccess uses a different rewrite rule, you may need to override this method.
 	 */
-	public function read(string $imageFile, int $size, ?string $sourceExt = NULL, ?string $destExt = NULL)
+	public function parseRequest(string $file): ResizerImage
 	{
+		$matches = [];
+		preg_match('/(.+)' . $this->config->rewriteSizeSep . '([0-9]+)([.]\w+)([.]\w+)?/', $file, $matches);
+		if (empty($matches) || count($matches) < 4) {
+			throw new \Exception("Invalid image request: $file");
+		}
+		$sourceExt = $this->ensureDot($matches[3] ?? $this->config->pictureDefaultSourceExt);
+		// if no dest extension was given, use the config default. If that is an empty string, use the source extension.
+		$defaultDest = empty($this->config->pictureDefaultDestExt) ? $sourceExt : $this->config->pictureDefaultDestExt;
+		$destExt = $this->ensureDot($matches[4] ?? $defaultDest);
+		return new ResizerImage($matches[1], intval($matches[2]), $sourceExt, $destExt);
+	}
+
+	/**
+	 * Parses a cache file to get the base name, width, source extension, and destination extension.
+	 * This must line up with makeCacheFilename()
+	 */
+	protected function parseCacheFilename(string $file): ResizerImage
+	{
+		// ensure path isnt absolute
+		$file = str_replace($this->config->resizerCachePath, '', $file);
+		$matches = [];
+		// note this is an internal pattern, cache file naming is not user-facing
+		preg_match('/(.+)-([0-9]+)([.]\w+)([.]\w+)/', $file, $matches);
+		if (empty($matches) || count($matches) < 5) {
+			throw new \Exception("Invalid cache file: $file");
+		}
+		return new ResizerImage($matches[1], intval($matches[2]), $this->ensureDot($matches[3]), $this->ensureDot($matches[4]));
+	}
+
+	/**
+	 * Returns the real path to the source file. You may pass a ResizerImage object or the individual components.
+	 */
+	public function sourceFile($baseName, ?string $sourceExt = NULL): string
+	{
+		if (is_a($baseName, ResizerImage::class)) {
+			$sourceExt = $baseName->sourceExt;
+			$baseName = $baseName->baseName;
+		}
 		$sourceExt = $this->ensureDot($sourceExt ?? $this->config->pictureDefaultSourceExt);
+		return $this->config->realImagePath . '/' . $baseName . $sourceExt;
+	}
+
+	/**
+	 * Returns a public URL for a given image file and size
+	 */
+	public function publicFile(string $baseImage, int $size, ?string $sourceExt = NULL, ?string $destExt = NULL): string
+	{
+		$sourceExt ??= $this->config->pictureDefaultSourceExt;
+		$sourceExt = $this->ensureDot($sourceExt);
 		if ($destExt === NULL) {
 			$destExt = empty($this->config->pictureDefaultDestExt) ? $sourceExt : $this->config->pictureDefaultDestExt;
 		}
 		$destExt = $this->ensureDot($destExt);
+		if ($sourceExt === $destExt) $destExt = ''; // remove dest ext if it's the same as source to declutter URLs
+		$sep = substr($this->config->rewriteSegment, -1) === '/' ? '' : '/';
+		$url = $this->config->rewriteSegment . $sep . $baseImage . $this->config->rewriteSizeSep . $size . $sourceExt . $destExt;
+		if ($this->config->addBaseUrl) $url = base_url($url);
+		return $url;
+	}
 
-		// random clean
+	/**
+	 * Standardizes the cache file name format. You may pass a ResizerImage object or the individual components.
+	 * This must line up with parseCacheFilename()
+	 */
+	protected function cacheFile($baseName, ?int $width = NULL, ?string $sourceExt = NULL, ?string $destExt = NULL): string
+	{
+		if (is_a($baseName, ResizerImage::class)) {
+			$width = $baseName->width;
+			$sourceExt = $baseName->sourceExt;
+			$destExt = $baseName->destExt;
+			$baseName = $baseName->baseName; // set this last!
+		} else {
+			$sourceExt = $this->ensureDot($sourceExt);
+			$destExt = $this->ensureDot($destExt);
+		}
+		$cacheDir = $this->config->resizerCachePath;
+		$cacheFile = "$cacheDir/$baseName-$width$sourceExt$destExt";
+		// ensure cache directory exists
+		$pathinfo = pathinfo($cacheFile);
+		if (!is_dir($pathinfo['dirname'])) {
+			mkdir($pathinfo['dirname'], 0777, TRUE);
+		}
+		return $cacheFile;
+	}
+
+	protected function ensureDot(string $ext): string
+	{
+		return substr($ext, 0, 1) === '.' ? $ext : '.' . $ext;
+	}
+
+	/**
+	 * Looks at the cache files for the given base file and width, and returns the smallest possible file that can be used or NULL.
+	 */
+	protected function findAltSource(string $baseFile, int $width, string $destExt): ?ResizerImage
+	{
+		$altSource = NULL;
+		$cacheMap = [];
+		foreach ($this->cacheFiles($baseFile) as $altFile) {
+			try {
+				$altRequest = $this->parseCacheFilename($altFile);
+			} catch (\Exception $e) {
+				log_message('debug', 'Resizer Lib encountered an improperly named cache file ' . $altFile);
+				continue;
+			}
+			// ensure cache file is in the same format as the destination extension
+			//if ($altRequest->destExt !== $destExt) continue;
+			// ensure cache file is larger than the requested width
+			if ($altRequest->width < $width) continue;
+			$cacheMap[$altRequest->width] = $altRequest;
+		}
+		// anything in here? use the smallest possible
+		if (count($cacheMap)) {
+			// sort by width keys
+			ksort($cacheMap);
+			$altSource = array_shift($cacheMap);
+		}
+		return $altSource;
+	}
+
+	/**
+	 * Reads image file and outputs contents via readfile() or GD function (ie. imagejpeg()). If the source is newer than the cache, it is automatically cleaned.
+	 * Pass $dpr to use a device pixel ratio, which will multiply the size of the image.
+	 * Note that all output buffering is cleared!
+	 */
+	public function read(string $requestedFile, float $dpr = 1.0)
+	{
+		$imageRequest = $this->parseRequest($requestedFile);
+		$requestedWidth = round($imageRequest->width * $dpr);
+		$sourceExt = $imageRequest->sourceExt;
+		$destExt = $imageRequest->destExt;
+
+		// random clean chance
 		if ($this->config->useCache && $this->randomFloat() < $this->config->randomCleanChance) {
 			$cleaned = $this->cleanDir(FALSE);
 			log_message('debug', 'Resizer Lib cleaned cache of ' . count($cleaned) . ' files.');
@@ -41,83 +198,90 @@ class Resizer
 
 		// load GD image lib
 		if (!$this->imageLib) $this->imageLib = \Config\Services::image('gd');
-		$sourceFile = $this->sourceFile($imageFile, $sourceExt);
-		$cacheFile = $this->cacheFile($imageFile, $size, $sourceExt, $destExt);
+
+		// ensure source exists
+		$sourceFile = $this->sourceFile($imageRequest->baseName, $sourceExt);
+		if (!file_exists($sourceFile)) {
+			throw new PageNotFoundException("Image not found: $sourceFile");
+		}
+		// read source file mtime
 		$sourceTime = filemtime($sourceFile);
 
-		// find an alternate cache if the correct size is not available
-		$altSource = NULL;
-		if (!file_exists($cacheFile)) {
-			$cacheMap = [];
-			foreach (glob($this->config->resizerCachePath . '/' . $imageFile . "*") as $altFile) {
-				// match the filename pattern
-				$matches = [];
-				// note that the dest ext is NOT optional, it should be in ALL file names
-				preg_match('/(.+)-([0-9]+)([.]\w+)([.]\w+)/', $altFile, $matches);
-				if (count($matches) < 5) {
-					log_message('debug', 'Resizer Lib encountered an improperly named cache file ' . $altFile);
-					continue;
-				}
-				list($altBaseName, $width, $altSourceExt, $altDestExt) = array_slice($matches, 1);
-				if (!is_numeric($width) || $altDestExt !== $destExt) continue; // ensure cache file is in the same format as the destination extension
-				$width = intval($width);
-				if ($width < $size) continue; // too small!
-				$cacheMap[$width] = $altFile;
-			}
-			// sort by width
-			ksort($cacheMap);
-			// anything in here? use the smallest possible
-			if (count($cacheMap)) $altSource = array_shift($cacheMap);
-			// ensure alt cache filemtime is older than source
-			if ($altSource && filemtime($altSource) > $sourceTime) {
+		// find a smaller source file if it's in the cache list
+		if ($altSource = $this->findAltSource($imageRequest->baseName, $requestedWidth, $destExt)) {
+			$altSourceFile = $this->cacheFile($altSource);
+			if ($sourceTime > filemtime($altSourceFile)) {
+				// source was updated, clear cache
 				try {
-					unlink($altSource);
+					unlink($altSourceFile);
 				} catch (\Exception $e) {
-					log_message('error', 'Resizer Lib cannot unlink file ' . $altSource);
+					log_message('error', 'Resizer Lib cannot unlink file ' . $altSourceFile);
 				}
 				$altSource = NULL;
+				$altSourceFile = NULL;
+				if ($this->config->debugHeaders) header("X-Resizer-Outdated-Alt: $altSourceFile");
+			}
+		}
+		// use the alt source file if it exists
+		$actualSourceFile = $altSourceFile ?? $sourceFile;
+
+		// generate cache file name for the requested image
+		$cacheFile = $this->cacheFile($imageRequest->baseName, $requestedWidth, $sourceExt, $destExt);
+
+		// check cache validity
+		$createCache = TRUE;
+		$cacheExists = FALSE;
+		if (file_exists($cacheFile)) {
+			if ($sourceTime > filemtime($cacheFile)) {
+				// source was updated, clear cache
+				try {
+					unlink($cacheFile);
+				} catch (\Exception $e) {
+					log_message('error', 'Resizer Lib cannot unlink file ' . $cacheFile);
+				}
+				if ($this->config->debugHeaders) header("X-Resizer-Outdated: $altSourceFile");
+			} else {
+				// cache is valid
+				$createCache = FALSE;
+				$cacheExists = TRUE;
 			}
 		}
 
-		if (!file_exists($cacheFile)) {
-			// no cache for this size
-			$createCache = TRUE;
-			$cacheExists = FALSE;
-		} else if ($sourceTime > filemtime($cacheFile)) {
-			// source was updated, clear cache
-			try {
-				unlink($cacheFile);
-			} catch (\Exception $e) {
-				log_message('error', 'Resizer Lib cannot unlink file ' . $cacheFile);
-			}
-			$createCache = TRUE;
-			$cacheExists = FALSE;
-		} else {
-			// cache is valid
-			$createCache = FALSE;
-			$cacheExists = TRUE;
-		}
-
-		// if no cache exists, read the image size (performance hit!) and determine if its out of bounds
+		// validate requested width (and implied height) against source image size
+		$width = $requestedWidth;
+		// we'll assume that if a cache file exists, the requested width is valid
 		if (!$cacheExists) {
-			$this->imageLib->withFile($altSource ?? $sourceFile); // try to read from the smaller alt source if it exists
+			// if no cache exists, read the image size (performance hit!) and determine if its out of bounds
+			$this->imageLib->withFile($actualSourceFile);
+			$sourceWidth = $this->imageLib->getWidth();
+			$sourceHeight = $this->imageLib->getHeight();
+			$ratio = $sourceWidth / $sourceHeight;
+			$requestedHeight = round($requestedWidth / $ratio);
 			// disallow upscale check
 			if (!$this->config->allowUpscale) {
-				$sourceWidth = $this->imageLib->getWidth();
-				$sourceHeight = $this->imageLib->getHeight();
-				if ($sourceWidth <= $size && $sourceHeight <= $size) {
-					$size = max($sourceWidth, $sourceHeight);
-					$cacheFile = $this->cacheFile($imageFile, $size, $sourceExt, $destExt);
-					$cacheExists = file_exists($cacheFile);
+				if ($requestedWidth > $sourceWidth) {
+					// too wide
+					$width = $sourceWidth;
+				} else if ($requestedHeight > $sourceHeight) {
+					// too tall
+					$width = round($sourceHeight * $ratio);
 				}
 			}
-			// maxSize check
-			if ($this->config->maxSize && $size > $this->config->maxSize) {
-				$size = $this->config->maxSize;
-				$cacheFile = $this->cacheFile($imageFile, $size, $sourceExt, $destExt);
-				$cacheExists = file_exists($cacheFile);
+			// maxSize check across both dimensions
+			if ($this->config->maxSize) {
+				if ($width > $this->config->maxSize) {
+					$width = $this->config->maxSize;
+				}
+				// recaclulate height and check it
+				$requestedHeight = $width / $ratio;
+				if ($requestedHeight > $this->config->maxSize) {
+					$requestedHeight = $this->config->maxSize;
+					$width = round($requestedHeight * $ratio);
+				}
 			}
 		}
+
+		// $width is now valid, so we can resize the image
 
 		// not using cache? then always create the output file
 		if (!$this->config->useCache) {
@@ -129,17 +293,24 @@ class Resizer
 		if (!$cacheExists) {
 			// read image width if we haven't already
 			if (!$this->imageLib->getWidth()) {
-				$this->imageLib->withFile($altSource ?? $sourceFile);
+				$this->imageLib->withFile($actualSourceFile);
 			}
-			// resize the image (performance hit!)
-			$this->imageLib->resize($size, $size, TRUE, 'width');
+			$sourceWidth = $this->imageLib->getWidth();
+			$sourceHeight = $this->imageLib->getHeight();
+			$ratio = $sourceWidth / $sourceHeight;
+			// resize the image
+			$this->imageLib->resize($width, round($width / $ratio));
+			// save the image to the cache
 			if ($createCache) {
 				$this->imageLib->save($cacheFile);
 				$cacheExists = TRUE;
+			} else {
+				$cacheFile = ""; // for the debug header
 			}
 		} else {
 			// cache exists, touch the file to update the mtime
 			touch($cacheFile);
+			$actualSourceFile = $cacheFile;
 		}
 
 		// remove any CI output buffering
@@ -152,6 +323,12 @@ class Resizer
 		$headerDate = gmdate('D, d M Y H:i:s T', $sourceTime);
 		header("Last-Modified: $headerDate");
 		if ($this->config->cacheControlHeader) header("Cache-control: " . $this->config->cacheControlHeader);
+		if ($this->config->debugHeaders) {
+			header("X-Resizer-Source: $sourceFile");
+			header("X-Resizer-Actual-Source: $actualSourceFile");
+			header("X-Resizer-Cache: $cacheFile");
+			header("X-Resizer-Cache-Exists: " . ($cacheExists ? 'true' : 'false'));
+		}
 		// if we have a cache file, read it
 		if ($cacheExists) {
 			header("Content-Length: " . filesize($cacheFile));
@@ -169,7 +346,7 @@ class Resizer
 	 */
 	public function cleanDir(bool $forceCleanAll = FALSE): array
 	{
-		// interator
+		// loop through all files in the cache directory
 		$dir = new \RecursiveDirectoryIterator($this->config->resizerCachePath);
 		$filter = new \RecursiveCallbackFilterIterator($dir, function ($current, $key, $iterator) {
 			// Skip hidden files and directories.
@@ -212,64 +389,13 @@ class Resizer
 	}
 
 	/**
-	 * Returns a public URL for a given image file and size. This is useful for generating image URLs in views.
-	 */
-	public function publicFile(string $imageFile, int $size, ?string $sourceExt = NULL, ?string $destExt = NULL): string
-	{
-		if ($sourceExt === NULL) {
-			$sourceExt = $this->config->pictureDefaultSourceExt;
-		}
-		$sourceExt = $this->ensureDot($sourceExt);
-		if ($destExt === NULL) {
-			$destExt = empty($this->config->pictureDefaultDestExt) ? $sourceExt : $this->config->pictureDefaultDestExt;
-		}
-		$destExt = $this->ensureDot($destExt);
-		if ($sourceExt === $destExt) $destExt = ''; // remove dest ext if it's the same as source
-
-		$url = $this->config->rewriteSegment . '/' . $imageFile . $this->config->rewriteSizeSep . $size . $sourceExt . $destExt;
-		if ($this->config->addBaseUrl) $url = base_url($url);
-		return $url;
-	}
-
-	/**
-	 * Returns the path to the source file. This is useful for working with server-side file operations.
-	 */
-	public function sourceFile(string $imageFile, ?string $sourceExt = NULL): string
-	{
-		$sourceExt = $this->ensureDot($sourceExt ?? $this->config->pictureDefaultSourceExt);
-		return $this->config->realImagePath . '/' . $imageFile . $sourceExt;
-	}
-
-	/**
-	 * Gets the path + name of the cache file, and ensures the path exists.
-	 */
-	public function cacheFile(string $imageFile, int $size, ?string $sourceExt = NULL, ?string $destExt = NULL): string
-	{
-		$sourceExt = $this->ensureDot($sourceExt ?? $this->config->pictureDefaultSourceExt);
-		$destExt = $this->ensureDot($destExt ?? empty($this->config->pictureDefaultDestExt) ? $sourceExt : $this->config->pictureDefaultDestExt);
-
-		// ensure source file exists before we create directories!
-		$sourceFile = $this->sourceFile($imageFile, $sourceExt);
-		if (!is_file($sourceFile)) {
-			throw new \Exception("Cannot find source file $sourceFile");
-		}
-		$cacheDir = $this->config->resizerCachePath;
-		$cacheFileName = $imageFile . '-' . $size . $sourceExt . $destExt;
-		$cacheFile = "$cacheDir/$cacheFileName";
-		$pathinfo = pathinfo($cacheFile);
-		if (!is_dir($pathinfo['dirname'])) {
-			mkdir($pathinfo['dirname'], 0777, TRUE);
-		}
-		return $cacheFile;
-	}
-
-	/**
 	 * Returns a list of cache files for a given image file. Useful for cleaning deleted files.
 	 */
 	public function cacheFiles(string $imageFile): array
 	{
 		$files = [];
-		$search = $this->config->resizerCachePath . '/' . $imageFile . '*';
+		$sep = substr($this->config->resizerCachePath, -1) === '/' ? '' : '/';
+		$search = $this->config->resizerCachePath . $sep . $imageFile . '*';
 		foreach (glob($search) as $file) {
 			$files[] = $file;
 		}
@@ -463,11 +589,5 @@ class Resizer
 	protected function randomFloat($min = 0, $max = 1, $includeMax = FALSE): float
 	{
 		return $min + mt_rand(0, (mt_getrandmax() - ($includeMax ? 0 : 1))) / mt_getrandmax() * ($max - $min);
-	}
-
-	protected function ensureDot(string $ext): string
-	{
-		if (empty($ext)) throw new \Exception("Resizer requires a file extension");
-		return substr($ext, 0, 1) === '.' ? $ext : '.' . $ext;
 	}
 }

@@ -28,7 +28,7 @@ Options All -Indexes
 	
 	# Image resizer
 	# img/some-folder/filename-1024.jpg.webp
-	RewriteRule ^img\/(.+)-([0-9]+)([.]\w+)([.]\w+)? resizer/read?file=$1&size=$2&sourceExt=$3&destExt=$4 [L,NC,QSA]
+	RewriteRule ^img\/(.+) resizer/read?file=$1 [L,NC,QSA]
 
 	# Checks to see if the user is attempting to access a valid file,
 	# such as an image or css document, if this isn't true it sends the

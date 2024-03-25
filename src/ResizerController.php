@@ -19,21 +19,12 @@ class ResizerController extends Controller
     public function read()
     {
         $request = \Config\Services::request();
-        $imageFile = $request->getGet('file');
-        if (empty($imageFile)) throw new \Exception('No file given!');
-        $size = $request->getGet('size');
-        if (empty($size)) throw new \Exception('No size given!');
-        $sourceExt = $request->getGet('sourceExt');
-        if (empty($sourceExt)) throw new \Exception('No source extention given!');
-        $destExt = $request->getGet('destExt');
-        if (empty($destExt)) $destExt = NULL;
-
+        $file = $request->getGet('file');
+        if (empty($file)) throw new \Exception('No file given!');
         // read the device pixel ratio
         $dpr = $request->getGet('dpr') ?? 1;
-        $size = floor(intval($size) * floatval($dpr));
-
         // generate cache file and spit out the actual image
-        $this->resizer->read($imageFile, $size, $sourceExt, $destExt);
+        $this->resizer->read($file, floatval($dpr));
         // exit the script
         exit;
     }
