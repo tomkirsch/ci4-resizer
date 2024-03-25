@@ -165,6 +165,7 @@ class Resizer
 
 	/**
 	 * Cleans the entire cache dir. Uses filemtime or forced deletion. Returns an array of files deleted.
+	 * This should be done occasionally, to ensure the cache doesn't grow too large.
 	 */
 	public function cleanDir(bool $forceCleanAll = FALSE): array
 	{
@@ -195,25 +196,14 @@ class Resizer
 	}
 
 	/**
-	 * Cleans all cache files for a given image using a simple stristr() match. Returns an array of files deleted.
+	 * Cleans all cache files for a given image. Returns an array of files deleted.
 	 */
-	public function cleanFile(string $pattern): array
+	public function cleanFile(string $imageFile): array
 	{
-		$dir = new \RecursiveDirectoryIterator($this->config->resizerCachePath);
-		$filter = new \RecursiveCallbackFilterIterator($dir, function ($current, $key, $iterator) use ($pattern) {
-			// Skip hidden files and directories.
-			if ($current->getFilename()[0] === '.') return FALSE;
-			if ($current->isDir()) return TRUE; // recursive
-			// only delete files with the given filename
-			return stristr($current->getFilename(), $pattern);
-		});
-		$files = [];
-		$iterator = new \RecursiveIteratorIterator($filter);
-		foreach ($iterator as $info) {
-			$file = $info->getRealPath();
+		$files = $this->cacheFiles($imageFile);
+		foreach ($files as $file) {
 			try {
 				unlink($file);
-				$files[] = $file;
 			} catch (\Exception $e) {
 				log_message('error', 'Resizer Lib cannot unlink file ' . $file);
 			}
@@ -272,6 +262,20 @@ class Resizer
 		}
 		return $cacheFile;
 	}
+
+	/**
+	 * Returns a list of cache files for a given image file. Useful for cleaning deleted files.
+	 */
+	public function cacheFiles(string $imageFile): array
+	{
+		$files = [];
+		$search = $this->config->resizerCachePath . '/' . $imageFile . '*';
+		foreach (glob($search) as $file) {
+			$files[] = $file;
+		}
+		return $files;
+	}
+
 
 	/**
 	 * Returns a picture element with source set to the public URL. Options:
