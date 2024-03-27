@@ -357,16 +357,20 @@ class Resizer
 		$iterator = new \RecursiveIteratorIterator($filter);
 		$files = [];
 		foreach ($iterator as $info) {
-			// delete file if $forceCleanAll, or file mtime is older than our ttl
-			$expired = $this->config->ttl ? $info->getMTime() + $this->config->ttl < time() : FALSE;
-			if ($forceCleanAll || $expired) {
-				$file = $info->getRealPath();
-				try {
-					unlink($file);
-					$files[] = $file;
-				} catch (\Exception $e) {
-					log_message('error', 'Resizer Lib cannot unlink file ' . $file);
+			// delete file if $forceCleanAll, or file mtime is older than our ttl. SplFileInfo::getMTime() sometimes fails, so check for it
+			try {
+				$expired = $this->config->ttl ? $info->getMTime() + $this->config->ttl < time() : FALSE;
+				if ($forceCleanAll || $expired) {
+					$file = $info->getRealPath();
+					try {
+						unlink($file);
+						$files[] = $file;
+					} catch (\Exception $e) {
+						log_message('error', 'Resizer Lib cannot unlink file ' . $file);
+					}
 				}
+			} catch (\Exception $e) {
+				// file might not exist
 			}
 		}
 		return $files;
@@ -455,6 +459,16 @@ class Resizer
 		// now handle the "default" source in $options
 		// we need <source>s for each screenwidth. this causes some bloat, but it's the only way to support dpr AND screen width
 		$list = $options['breakpoints'];
+		if (!is_array($list)) {
+			if (stristr($list, ',')) {
+				$list = array_map('trim', explode(',', $list));
+			} else if (stristr($list, ' ')) {
+				$list = array_map('trim', explode(' ', $list));
+			} else {
+				$list = [$list];
+			}
+		}
+		$list = array_map('intval', $list);
 		rsort($list); // sort from largest to smallest
 		$lastKey = array_key_last($list); // this will not have a media query
 		foreach ($list as $screenwidth) {
