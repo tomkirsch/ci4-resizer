@@ -3,6 +3,7 @@
 namespace Tomkirsch\Resizer;
 
 use CodeIgniter\Exceptions\PageNotFoundException;
+use CodeIgniter\Files\File;
 use CodeIgniter\Images\Handlers\BaseHandler;
 
 /**
@@ -104,17 +105,28 @@ class Resizer
 	/**
 	 * Returns a public URL for a given image file and size
 	 */
-	public function publicFile(string $baseImage, int $size, ?string $sourceExt = NULL, ?string $destExt = NULL): string
+	public function publicFile(string $imageFile, int $size, ?string $sourceExt = NULL, ?string $destExt = NULL): string
 	{
+		if (!$sourceExt) {
+			// is it in the filename?
+			$parts = explode('.', $imageFile);
+			if (count($parts) > 1) {
+				$sourceExt = '.' . array_pop($parts);
+				$imageFile = implode('.', $parts);
+			}
+		}
+		// if all else fails, use the default in config
 		$sourceExt ??= $this->config->pictureDefaultSourceExt;
 		$sourceExt = $this->ensureDot($sourceExt);
+
+		// if no dest extension was given, use the config value. If that is an empty string, use the source extension.
 		if ($destExt === NULL) {
 			$destExt = empty($this->config->pictureDefaultDestExt) ? $sourceExt : $this->config->pictureDefaultDestExt;
 		}
 		$destExt = $this->ensureDot($destExt);
 		if ($sourceExt === $destExt) $destExt = ''; // remove dest ext if it's the same as source to declutter URLs
 		$sep = substr($this->config->rewriteSegment, -1) === '/' ? '' : '/';
-		$url = $this->config->rewriteSegment . $sep . $baseImage . $this->config->rewriteSizeSep . $size . $sourceExt . $destExt;
+		$url = $this->config->rewriteSegment . $sep . $imageFile . $this->config->rewriteSizeSep . $size . $sourceExt . $destExt;
 		if ($this->config->addBaseUrl) $url = base_url($url);
 		return $url;
 	}
