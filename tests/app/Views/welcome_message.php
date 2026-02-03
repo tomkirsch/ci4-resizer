@@ -17,7 +17,7 @@
 	<p>a simple 300px image</p>
 	<?= img([
 		'src' => Config\Services::resizer()->publicFile('kitten-src', 300),
-		'style' => 'display: block; margin: 1rem 0;',
+		'style' => 'display: block; margin: 1rem 0; aspect-ratio: 300 / 169', // you can use aspect-ratio here for better CLS performance
 	]) ?>
 	<hr>
 	<p>a 300px image converted to webP with 2x DPR support using GET query string (should be 600px on hires browser)</p>

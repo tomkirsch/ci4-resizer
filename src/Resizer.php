@@ -3,7 +3,6 @@
 namespace Tomkirsch\Resizer;
 
 use CodeIgniter\Exceptions\PageNotFoundException;
-use CodeIgniter\Files\File;
 use CodeIgniter\Images\Handlers\BaseHandler;
 
 /**
@@ -44,7 +43,7 @@ class ResizerImage
  **/
 class Resizer
 {
-	const VERSION = '2.0.0';
+	const VERSION = '2.0.1';
 
 	public ?ResizerConfig $config = NULL;
 	public ?BaseHandler $imageLib = NULL;
@@ -61,7 +60,12 @@ class Resizer
 	public function parseRequest(string $file): ResizerImage
 	{
 		$matches = [];
-		preg_match('/(.+)' . $this->config->rewriteSizeSep . '([0-9]+)([.]\w+)([.]\w+)?/', $file, $matches);
+		preg_match(
+			'#^(.+?)' . preg_quote($this->config->rewriteSizeSep, '#') .
+				'([0-9]+)(\.[a-zA-Z0-9]+)(\.[a-zA-Z0-9]+)?$#',
+			$file,
+			$matches
+		);
 		if (empty($matches) || count($matches) < 4) {
 			throw new \Exception("Invalid image request: $file");
 		}
@@ -156,10 +160,12 @@ class Resizer
 		return $cacheFile;
 	}
 
-	protected function ensureDot(string $ext): string
+	protected function ensureDot(?string $ext): string
 	{
-		return substr($ext, 0, 1) === '.' ? $ext : '.' . $ext;
+		if (!$ext) return '';
+		return $ext[0] === '.' ? $ext : '.' . $ext;
 	}
+
 
 	/**
 	 * Looks at the cache files for the given base file and width, and returns the smallest possible file that can be used or NULL.
@@ -326,7 +332,9 @@ class Resizer
 		}
 
 		// remove any CI output buffering
-		ob_end_flush();
+		while (ob_get_level()) {
+			ob_end_clean();
+		}
 
 		// generate headers
 		$extNoDot = substr($destExt, 1);
@@ -420,7 +428,10 @@ class Resizer
 
 
 	/**
-	 * Returns a picture element with source set to the public URL. Options:
+	 * Returns a picture element with source set to the public URL. 
+	 * $attr is an associative array of attributes for the <picture> tag.
+	 * $imgAttr is an associative array of attributes for the <img> tag (sizes, fetchpriority, alt, etc).
+	 * $options
 	 * - file: (required) path and base file name without ext, ex: 'img/foo-bar'
 	 * - sourceExt: (optional) source file extension. Default is in config.
 	 * - destExt: (optional) destination file extension. Default is in config.
@@ -430,6 +441,7 @@ class Resizer
 	 * - lazy: (optional) use data-src or data-srcset with lowres placeholder. Default is in config.
 	 * - lowres: (optional)  'pixel64' (transparent pixel), 'first', 'last', 'custom', or supply the name to be appended to the file option. Default is in config.
 	 * - lowrescustom: (optional) custom HTML for src when lowres === custom
+	 * $additionalSources: (optional) additional source images to use. For ex, to have browser try avif, webp, then <img>, do: [['type' => 'image/avif', 'destExt' => 'avif'], ['type' => 'image/webp', 'destExt' => 'webp']]
 	 * Note that every element in $sources will inherit the $options array, so you can set defaults there.
 	 */
 	public function picture(array $attr, array $imgAttr, array $options, ...$additionalSources): string
@@ -515,7 +527,12 @@ class Resizer
 		);
 		$nl = (string) $options['newlines'];
 		$out = $nl . '<source';
-		if (!empty($options['media'])) $out .= ' media="' . $options['media'] . '"';
+		if (!empty($options['media'])) {
+			$out .= ' media="' . $options['media'] . '"';
+		}
+		if (!empty($options['type'])) {
+			$out .= ' type="' . $options['type'] . '"';
+		}
 		$attr = $options['lazy'] ? 'data-srcset' : 'srcset';
 		$out .= ' ' . $nl . $attr . '="' . implode(', ' . $nl, $this->pictureSourceSet($options)) . '"';
 		$out .= '>' . $nl;
@@ -537,6 +554,7 @@ class Resizer
 				$srcsets[intval($screenwidth) * $dpr] = $file . $xtra;
 			}
 		}
+		ksort($srcsets);
 		return $srcsets;
 	}
 
@@ -608,6 +626,9 @@ class Resizer
 			case 'avif': // (PHP 8 >= 8.1.0)
 				$func = 'imageavif';
 				break;
+		}
+		if (!isset($func) || !function_exists($func)) {
+			throw new \RuntimeException("Unsupported output format: $ext");
 		}
 		$func($this->imageLib->getResource());
 	}
