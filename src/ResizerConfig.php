@@ -26,7 +26,9 @@ class ResizerConfig extends BaseConfig
 	public array $pictureDefaultDprs = [1, 2]; // default device pixel ratios to support
 	public string $pictureDefaultSourceExt = '.jpg'; // default source extension for picture element
 	public string $pictureDefaultDestExt = ''; // default output extension for picture element. leave empty to use source extension by default.
-	public bool $pictureDefaultLazy = FALSE; // default lazy loading for picture element
-	public string $pictureDefaultLowRes = 'pixel64'; // low quality image placeholder: 'pixel64' (transparent pixel), 'first', 'last', 'custom', or supply the name to be appended to the file option
 	public string $pictureNewlines = "\n"; // newlines for picture element output, set to '' for minified output
+
+	public string $loading = 'auto'; // default loading attribute for images: 'lazy', 'eager', or 'auto'
+	public string $fetchPriority = 'auto'; // default fetchpriority attribute for images: 'high', 'low', or 'auto'
+	public string $pictureDefaultLowRes = 'pixel64'; // 'pixel64' (transparent pixel), 'first', 'last', 'custom', or supply the name to be appended to the file option.
 }

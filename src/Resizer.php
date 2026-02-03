@@ -438,9 +438,8 @@ class Resizer
 	 * - breakpoints: (optional) list the screen width breakpoints to support. Default is in config.
 	 * - dprs: (optional) for dpr mode, list the device pixel ratios to support. Default is in config.
 	 * - newlines: (optional) add newlines for readability. Default is in config.
-	 * - lazy: (optional) use data-src or data-srcset with lowres placeholder. Default is in config.
-	 * - lowres: (optional)  'pixel64' (transparent pixel), 'first', 'last', 'custom', or supply the name to be appended to the file option. Default is in config.
-	 * - lowrescustom: (optional) custom HTML for src when lowres === custom
+	 * - loading: (optional) whether to add loading attribute to the <img> tag. Default is in config.
+	 * - fetchpriority: (optional) whether to add fetchpriority attribute to the <img> tag. Default is in config.
 	 * $additionalSources: (optional) additional source images to use. For ex, to have browser try avif, webp, then <img>, do: [['type' => 'image/avif', 'destExt' => 'avif'], ['type' => 'image/webp', 'destExt' => 'webp']]
 	 * Note that every element in $sources will inherit the $options array, so you can set defaults there.
 	 */
@@ -455,7 +454,8 @@ class Resizer
 				'breakpoints' => $this->config->pictureDefaultBreakpoints,
 				'dprs' => $this->config->pictureDefaultDprs,
 				'newlines' => $this->config->pictureNewlines,
-				'lazy' => $this->config->pictureDefaultLazy,
+				'loading' => $this->config->loading,
+				'fetchpriority' => $this->config->fetchPriority,
 				'lowres' => $this->config->pictureDefaultLowRes,
 				'lowrescustom' => '',
 			],
@@ -469,7 +469,6 @@ class Resizer
 		if (empty($options['dprs'])) $options['dprs'] = [1];
 		$options['sourceExt'] = $this->ensureDot($options['sourceExt']);
 		$options['destExt'] = $this->ensureDot(empty($options['destExt']) ? $options['sourceExt'] : $options['destExt']); // inherit source ext if not set
-		$options['lazy'] = (bool) $options['lazy'];
 		$nl = (string) $options['newlines'];
 
 		$out = '<picture' . stringify_attributes($attr) . '>';
@@ -506,8 +505,24 @@ class Resizer
 			$out .= $this->pictureSource(array_merge($options, $sourceOptions));
 		}
 
-		// img lowres src (fallback for browsers that don't support <picture> or JS)
-		$imgAttr['src'] = $this->lowresSource($options);
+		$imgAttr = array_merge(
+			[
+				'src' => $this->lowresSource($options),
+				'alt' => '', // ensure alt exists
+			],
+			$imgAttr
+		);
+
+		// loading if explicitly set
+		if (!empty($options['loading']) && $options['loading'] !== 'auto') {
+			$imgAttr['loading'] = $options['loading'];
+		}
+
+		// fetchpriority if explicitly set
+		if (!empty($options['fetchpriority']) && $options['fetchpriority'] !== 'auto') {
+			$imgAttr['fetchpriority'] = $options['fetchpriority'];
+		}
+
 		$out .= $nl . '<img' . stringify_attributes($imgAttr) . '>';
 		$out .= $nl . '</picture>';
 		return $out;
@@ -533,8 +548,7 @@ class Resizer
 		if (!empty($options['type'])) {
 			$out .= ' type="' . $options['type'] . '"';
 		}
-		$attr = $options['lazy'] ? 'data-srcset' : 'srcset';
-		$out .= ' ' . $nl . $attr . '="' . implode(', ' . $nl, $this->pictureSourceSet($options)) . '"';
+		$out .= $nl . ' srcset="' . implode(', ' . $nl, $this->pictureSourceSet($options)) . '"';
 		$out .= '>' . $nl;
 		return $out;
 	}

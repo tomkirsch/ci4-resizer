@@ -3,7 +3,7 @@
 
 <head>
 	<meta charset="UTF-8">
-	<title>Welcome to CodeIgniter 4!</title>
+	<title>Resizer</title>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<link rel="shortcut icon" type="image/png" href="/favicon.ico" />
 </head>
@@ -17,7 +17,9 @@
 	<p>a simple 300px image</p>
 	<?= img([
 		'src' => Config\Services::resizer()->publicFile('kitten-src', 300),
-		'style' => 'display: block; margin: 1rem 0; aspect-ratio: 300 / 169', // you can use aspect-ratio here for better CLS performance
+		'style' => 'display: block; margin: 1rem 0; aspect-ratio: 300 / 169', // you can use aspect-ratio for better CLS performance
+		'loading' => 'eager', // override default loading attribute
+		'fetchpriority' => 'high', // override default fetchpriority attribute
 	]) ?>
 	<hr>
 	<p>a 300px image converted to webP with 2x DPR support using GET query string (should be 600px on hires browser)</p>
@@ -29,6 +31,7 @@
 	<?= img([
 		'src' => Config\Services::resizer()->publicFile('kitten-src', 3000),
 		'style' => 'display: block; margin: 1rem 0; max-width: 300px; height: auto;',
+		'loading' => 'lazy',
 	]) ?>
 	<hr>
 	<p>Picture utility. Makes an image at the default breakpoints, with the smallest as an LQIP and convert to webP.</p>
