@@ -19,20 +19,24 @@ class ResizerConfig extends \Tomkirsch\Resizer\ResizerConfig
 	public string $rewriteSizeSep = '-'; // separator from base file name and requested size. must match your .htaccess file regex
 
 	public string $realImagePath = ROOTPATH . '/public'; // real path to source images. this can be a private folder.
-	public string $resizerCachePath = ROOTPATH . '/writable/resizercache'; // path to store cached image files
+	public string $resizerCachePath = ROOTPATH . '/writable/resizercache'; // path to store cached image files. be careful with this path, it can be wiped out when clearing cache!
 	public bool $addBaseUrl = TRUE; // whether to add base_url() to the output of publicFile()
 
 	public int $ttl = 60 * 60 * 24 * 7; // clean cached images older than this (seconds). Whenever a cache is accessed, it resets the timer
 	public float $randomCleanChance = 0.01; // chance of cleaning expired images on each image request (default at 10%). set to 0 to disable
 	public ?string $cacheControlHeader = 'public, max-age=2592000'; // Cache-Control header for browser caching (default is 30 days)
+	public bool $debugHeaders = FALSE; // whether to output extra headers for debugging
 
 	public array $pictureDefaultBreakpoints = [576, 768, 992, 1200, 1400]; // default sizes for picture element, based off bootstrap breakpoints
 	public array $pictureDefaultDprs = [1, 2]; // default device pixel ratios to support
 	public string $pictureDefaultSourceExt = '.jpg'; // default source extension for picture element
 	public string $pictureDefaultDestExt = ''; // default output extension for picture element. leave empty to use source extension by default.
-	public bool $pictureDefaultLazy = FALSE; // default lazy loading for picture element
-	public string $pictureDefaultLowRes = 'pixel64'; // low quality image placeholder: 'pixel64' (transparent pixel), 'first', 'last', 'custom', or supply the name to be appended to the file option
 	public string $pictureNewlines = "\n"; // newlines for picture element output, set to '' for minified output
+
+	public string $loading = 'auto'; // default loading attribute for images: 'lazy', 'eager', or 'auto'
+	public string $fetchPriority = 'auto'; // default fetchpriority attribute for images: 'high', 'low', or 'auto'
+	public string $pictureDefaultLowRes = 'pixel64'; // 'pixel64' (transparent pixel), 'first', 'last', 'custom', or supply the name to be appended to the file option.
+
 }
 
 ```
@@ -94,7 +98,8 @@ Config\Services::resizer()->picture(
 		[	// options
 			'file' => 'kitten-src',
 			'breakpoints' => [576, 768, 992], // custom breakpoints
-			'lowres' => 'first',
+			'loading' => 'lazy', // load only when in viewport
+			'fetchpriority' => 'low', // priority once in viewport
 		],
 		// additional <source>s. These take priority.
 		['media' => '(min-width: 600px)', 'breakpoints' => [390]] // show a 390px image if screen is 600px or larger. This will also support DPR (2x)
